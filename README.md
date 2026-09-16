@@ -41,15 +41,45 @@ with planned deloads in weeks 7 and 12.
 
 ## Rebuilding
 
+**Quick start — three commands, ~15 seconds:**
+
 ```bash
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-./tools/build_all.sh            # 4K poster (default)
-./tools/build_all.sh --quick    # 2560 × 1440 quick preview
+python3 -m venv .venv                              # 1. create an isolated environment
+.venv/bin/pip install -r requirements.txt          # 2. install 3 dependencies
+./tools/build_all.sh                               # 3. rebuild every deliverable
 ```
 
-Requires Python 3 with `pillow`, `numpy` and `fontTools`. All fonts are **vendored**
-in `assets/fonts` (converted from the OFL-licensed Montserrat / Inter / Teko web fonts),
-so the build works fully offline.
+```bash
+./tools/build_all.sh            # 4K poster, 3840 × 2160 (default)
+./tools/build_all.sh --quick    # 2560 × 1440 quick preview, ~4s
+PY=python3 ./tools/build_all.sh # force a specific interpreter
+```
+
+Requires Python 3.8+ with `pillow`, `numpy` and `fontTools` — nothing else, and **no
+internet access** (all fonts are vendored in `assets/fonts`, converted from the
+OFL-licensed Montserrat / Inter / Teko web fonts).
+
+Already have the dependencies system-wide? Skip the venv and run `./tools/build_all.sh`
+directly — the script auto-detects a working interpreter, including a `.venv` in the
+repository root.
+
+> You do **not** need to run anything just to *look* at the poster: open
+> `output/project-hybrid-infographic.png` (or the PDF) directly.
+
+### البدء السريع (بالعربية)
+
+```bash
+python3 -m venv .venv                       # إنشاء بيئة بايثون معزولة
+.venv/bin/pip install -r requirements.txt   # تثبيت المكتبات الثلاث
+./tools/build_all.sh                        # بناء كل الملفات النهائية
+```
+
+- النتائج تُحفظ في مجلد **`output/`**: الملصق PNG بدقة 4K، نسخة PDF للطباعة، ودليل التمارين.
+- لجعل البناء أسرع أثناء التجربة: `./tools/build_all.sh --quick`
+- لتعديل البرنامج التدريبي: غيّر الأرقام والتمارين في **`tools/plan_data.py`** ثم أعد
+  تشغيل الأمر نفسه — الملصق والدليل يتحدّثان معاً.
+- على ويندوز استعمل `.venv\Scripts\python.exe` بدل `.venv/bin/python`، وشغّل السكربت
+  عبر Git Bash أو WSL.
 
 ### Repository layout
 
