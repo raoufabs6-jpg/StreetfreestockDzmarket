@@ -1,0 +1,275 @@
+"""
+PROJECT HYBRID - Phase 1 content model.
+Single source of truth for the infographic + exercise manual.
+Edit here, then re-run:  python3 tools/build_infographic.py
+"""
+
+META = {
+    "program": "PROJECT HYBRID",
+    "phase": "ZERO TO ADVANCED",
+    "kicker": "THE GYM & CALISTHENICS BLUEPRINT FOR HYPERTROPHY & SKILL",
+    "eyebrow": "PHASE 1  ·  BEGINNER ARCHITECTURE  ·  12-WEEK BLOCK",
+    "footer_left": "PROJECT HYBRID  ·  PHASE 1 BLUEPRINT  ·  12-WEEK BLOCK",
+    "footer_right": "173 CM / 58 KG  ·  TOTAL BEGINNER  ·  4 TRAINING DAYS / WEEK",
+}
+
+PROFILE = [
+    ("TARGET LEVEL", "Total Beginner (Phase 1)"),
+    ("HEIGHT / WEIGHT", "173 cm  |  58 kg  —  lean-mass building focus"),
+    ("GOAL", "Hypertrophy · Base strength · Athletic physique · Calisthenics mastery"),
+    ("WEEKLY DOSE", "4 training days · 3 recovery days · 12 working sets / session"),
+]
+
+LEGEND = [
+    ("GOLD", "GYM DAY TARGET MUSCLES"),
+    ("CYAN", "CALISTHENICS TARGET MUSCLES"),
+    ("MIX", "HYBRID · SKILL + MOBILITY"),
+]
+
+# accent = gold (gym) | cyan (calisthenics) | rest (recovery) | mix (both)
+# each exercise: name, scheme, rest, muscles [(label, tone)], cue, detail (manual page)
+DAYS = [
+    {
+        "day": "SUNDAY",
+        "accent": "gold",
+        "type": "GYM",
+        "title": "UPPER BODY",
+        "focus": "Hypertrophy focus · dumbbells & cables",
+        "icon": "dumbbell",
+        "figure": "day-sun.png",
+        "crop": (0.210, 0.015, 0.790, 0.955),
+        "exercises": [
+            {
+                "name": "Dumbbell Bench Press",
+                "scheme": "3 × 8–10",
+                "rest": "90s rest",
+                "muscles": [("CHEST", "gold"), ("TRICEPS", "gold"), ("FRONT DELTS", "gold")],
+                "cue": "Lying flat, elbows at 45° — press dumbbells up over the chest.",
+                "start": "Lying flat on the bench, shoulder blades pinned, elbows tucked to 45°.",
+                "finish": "Pressing the dumbbells up until they meet over the chest, elbows just short of lock.",
+            },
+            {
+                "name": "Seated Cable Row",
+                "scheme": "3 × 10–12",
+                "rest": "90s rest",
+                "muscles": [("LATS", "gold"), ("RHOMBOIDS", "gold"), ("BICEPS", "gold")],
+                "cue": "Arms extended, slight knee bend — row the handle to the lower stomach.",
+                "start": "Seated tall, arms extended, slight knee bend, torso upright.",
+                "finish": "Handle pulled to the lower stomach, shoulder blades squeezed together.",
+            },
+            {
+                "name": "Dumbbell Shoulder Press",
+                "scheme": "3 × 10–12",
+                "rest": "90s rest",
+                "muscles": [("FRONT DELTS", "gold"), ("SIDE DELTS", "gold"), ("TRICEPS", "gold")],
+                "cue": "Seated, dumbbells at shoulder level — press overhead until arms lock.",
+                "start": "Seated with back support, dumbbells racked at shoulder level, wrists stacked.",
+                "finish": "Pressed overhead to full lockout, ribs down, no lower-back arch.",
+            },
+        ],
+    },
+    {
+        "day": "MONDAY",
+        "accent": "cyan",
+        "type": "CALISTHENICS",
+        "title": "FUNDAMENTALS",
+        "focus": "Bodyweight patterns · floor work",
+        "icon": "figure",
+        "figure": "day-mon.png",
+        "crop": (0.020, 0.255, 0.980, 0.735),
+        "exercises": [
+            {
+                "name": "Standard / Knee Push-Ups",
+                "scheme": "3 × 6–10",
+                "rest": "90s rest",
+                "muscles": [("CHEST", "cyan"), ("FRONT DELTS", "cyan"), ("TRICEPS", "cyan")],
+                "cue": "High plank, core tight — lower the chest to 1 inch off the floor.",
+                "start": "High plank, hands under shoulders, glutes and core locked, body in one line.",
+                "finish": "Chest lowered to roughly 1 inch from the floor, elbows tucked to ~45°.",
+            },
+            {
+                "name": "Australian Pull-Ups",
+                "scheme": "3 × 8–10",
+                "rest": "90s rest",
+                "muscles": [("MID-BACK", "cyan"), ("LATS", "cyan"), ("BICEPS", "cyan")],
+                "cue": "Inverted row: body straight, pull the chest up to the low bar.",
+                "start": "Hanging under a low bar, arms extended, heels on the floor, body straight.",
+                "finish": "Chest touched to the bar, shoulder blades retracted, elbows driven back.",
+            },
+            {
+                "name": "Forearm Plank",
+                "scheme": "3 × 30–45s",
+                "rest": "60s rest",
+                "muscles": [("RECTUS ABS", "cyan"), ("DEEP CORE", "cyan"), ("GLUTES", "cyan")],
+                "cue": "Static hold on forearms and toes, pelvis slightly tucked.",
+                "start": "Forearms and toes down, elbows under shoulders, spine neutral.",
+                "finish": "Static hold — pelvis tucked, ribs down, glutes tight. Time is the target.",
+            },
+        ],
+    },
+    {
+        "day": "TUESDAY",
+        "accent": "rest",
+        "type": "ACTIVE RECOVERY",
+        "title": "REST & RECOVERY",
+        "focus": "Blood flow, hydration, repair",
+        "icon": "pulse",
+        "figure": None,
+        "bullets": [
+            ("walk", "Light walking — 20–30 min easy pace"),
+            ("drop", "Hydration first: 2.5–3 L water across the day"),
+            ("plate", "Protein at every meal to fuel the 58 kg to 65 kg+ gain"),
+        ],
+        "stat": ("48h", "recovery window before the next pulling session"),
+    },
+    {
+        "day": "WEDNESDAY",
+        "accent": "gold",
+        "type": "GYM",
+        "title": "LOWER BODY",
+        "focus": "Squat hinge press · free weights & machine",
+        "icon": "barbell",
+        "figure": "day-wed.png",
+        "crop": (0.180, 0.030, 0.840, 0.965),
+        "exercises": [
+            {
+                "name": "Goblet Squat",
+                "scheme": "3 × 10–12",
+                "rest": "90s rest",
+                "muscles": [("QUADS", "gold"), ("GLUTES", "gold"), ("CORE", "gold")],
+                "cue": "Dumbbell held vertically at the chest — sink between the knees.",
+                "start": "Standing tall, dumbbell held vertically against the chest, feet shoulder-width.",
+                "finish": "Deep squat with elbows tracking inside the knees, chest up, heels planted.",
+            },
+            {
+                "name": "Romanian Deadlift",
+                "scheme": "3 × 10–12",
+                "rest": "90s rest",
+                "muscles": [("HAMSTRINGS", "gold"), ("GLUTES", "gold"), ("ERECTORS", "gold")],
+                "cue": "Standing with dumbbells — hinge the hips back, soft knees.",
+                "start": "Standing with dumbbells at the thighs, shoulders back, knees softly bent.",
+                "finish": "Hips pushed back, torso hinged to mid-shin, hamstring stretch — spine neutral.",
+            },
+            {
+                "name": "Leg Press",
+                "scheme": "3 × 12–15",
+                "rest": "90s rest",
+                "muscles": [("VASTUS LAT.", "gold"), ("VASTUS MED.", "gold"), ("GLUTES", "gold")],
+                "cue": "Seated in the machine, knees at 90° — drive the sled up.",
+                "start": "Seated, knees bent to 90°, feet flat and shoulder-width on the platform.",
+                "finish": "Sled driven up until the legs are almost straight — never slam the knees.",
+            },
+        ],
+    },
+    {
+        "day": "THURSDAY",
+        "accent": "cyan",
+        "type": "CALISTHENICS",
+        "title": "PULL + CORE",
+        "focus": "Vertical pull · scapular control",
+        "icon": "bar",
+        "figure": "day-thu.png",
+        "crop": (0.170, 0.015, 0.830, 0.995),
+        "exercises": [
+            {
+                "name": "Negative Pull-Ups",
+                "scheme": "3 × 4–6",
+                "rest": "120s rest",
+                "muscles": [("LATS", "cyan"), ("BICEPS", "cyan"), ("GRIP", "cyan")],
+                "cue": "Jump to chin-over-bar — lower over 3–5 s to a dead hang.",
+                "start": "Jump or step up so the chin clears the bar, shoulders engaged.",
+                "finish": "Lowering under control over 3–5 seconds to a full dead hang. Reset each rep.",
+            },
+            {
+                "name": "Scapular Pulls",
+                "scheme": "3 × 8–10",
+                "rest": "60s rest",
+                "muscles": [("LOWER TRAPS", "cyan"), ("LATS", "cyan")],
+                "cue": "Dead hang — pull shoulders down and back, elbows straight.",
+                "start": "Dead hang from the bar, arms straight, shoulders relaxed by the ears.",
+                "finish": "Shoulders pulled down and back, chest lifting slightly — elbows never bend.",
+            },
+            {
+                "name": "Hollow Body Hold",
+                "scheme": "3 × 20–30s",
+                "rest": "60s rest",
+                "muscles": [("UPPER ABS", "cyan"), ("LOWER ABS", "cyan"), ("CORE", "cyan")],
+                "cue": "Lying on the back, press the lower back hard into the floor.",
+                "start": "On the back, lower back pressed down, arms and legs elevated off the floor.",
+                "finish": "Static hold — ribs down, arms by the ears, legs low but lumbar flat. No arch.",
+            },
+        ],
+    },
+    {
+        "day": "FRIDAY",
+        "accent": "rest",
+        "type": "REST",
+        "title": "TISSUE REPAIR",
+        "focus": "Surplus calories, deep sleep",
+        "icon": "moon",
+        "figure": None,
+        "bullets": [
+            ("plate", "Caloric surplus: +300 to +400 kcal over maintenance"),
+            ("moon", "Sleep 8+ hours for central nervous system recovery"),
+            ("pulse", "Zero hard training — keep the day genuinely easy"),
+        ],
+        "stat": ("8h+", "sleep target — the single biggest recovery lever"),
+    },
+    {
+        "day": "SATURDAY",
+        "accent": "mix",
+        "type": "HYBRID",
+        "title": "SKILLS + MOBILITY",
+        "focus": "Skill practice, joints, mobility",
+        "icon": "bolt",
+        "figure": "day-sat.png",
+        "crop": (0.020, 0.250, 0.980, 0.875),
+        "exercises": [
+            {
+                "name": "Frog Stand Prep",
+                "scheme": "4 × 10–15s",
+                "rest": "120s rest",
+                "muscles": [("WRISTS", "gold"), ("FRONT DELTS", "cyan"), ("CORE", "cyan")],
+                "cue": "Knees resting on the triceps — lean until the feet leave the floor.",
+                "start": "Hands on the floor, knees resting on the upper triceps, gaze slightly forward.",
+                "finish": "Leaning forward until the feet lift clear of the floor and balance is held.",
+            },
+            {
+                "name": "Wall Walks",
+                "scheme": "3 × 3–5",
+                "rest": "120s rest",
+                "muscles": [("SHOULDERS", "gold"), ("UPPER CHEST", "cyan"), ("CORE", "cyan")],
+                "cue": "Push-up position, feet on the wall — walk the hands in.",
+                "start": "Push-up position with the feet against the wall, core braced.",
+                "finish": "Feet walked up the wall, hands walked in — supported handstand, ribs down.",
+            },
+            {
+                "name": "Deep Squat Hold",
+                "scheme": "3 × 45–60s",
+                "rest": "60s rest",
+                "muscles": [("HIPS", "gold"), ("ANKLES", "cyan"), ("GROIN", "cyan")],
+                "cue": "The deepest possible squat, chest up, knees tracked out.",
+                "start": "Standing, feet slightly wider than the hips, toes turned out a little.",
+                "finish": "Static hold at the absolute bottom of the squat — chest up, heels down.",
+            },
+        ],
+    },
+]
+
+SYSTEM = {
+    "title": "THE SYSTEM",
+    "sub": "How the 12 weeks progress",
+    "phases": [
+        ("W1–4", "FOUNDATION", 0.34, "Master all 15 movements · 3 sets each · leave 2–3 reps in reserve"),
+        ("W5–8", "OVERLOAD", 0.62, "Add reps or load weekly · 4th set on main lifts · RIR 1–2"),
+        ("W9–12", "SKILL INTEGRATION", 1.00, "Heavy day + skill day · first full pull-up · RIR 1"),
+    ],
+    # weekly working-set volume, weeks 1..12 (drives the sparkline)
+    "volume": [12, 12, 13, 13, 15, 16, 9, 17, 18, 18, 19, 9],
+    "deload": "Deload weeks 7 & 12 — keep the movements, halve the volume",
+    "targets": [
+        ("CALORIES", "+300–400 kcal surplus"),
+        ("PROTEIN", "1.6–2.2 g/kg  |  100–130 g"),
+        ("TRAINING", "~35–45 min per session"),
+    ],
+}

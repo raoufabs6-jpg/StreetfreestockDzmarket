@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.pyc
+
+# local virtualenv (build-only, not part of the deliverable)
+.venv/
+
+# derived figure plates - regenerated from assets/raw on every build
+assets/processed/
+
+# scratch
+/tmp/
+*.log
