@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # PROJECT HYBRID - rebuild every deliverable from source.
 #
-#   ./tools/build_all.sh              # poster + manual
-#   ./tools/build_all.sh --quick      # 2560x1440 poster (fast preview)
+#   ./tools/build_all.sh              # poster (4K) + manual + Arabic booklet (A4/300dpi)
+#   ./tools/build_all.sh --quick      # half-resolution everything (fast preview)
 #
 # Requires: python3 with pillow, numpy, fontTools (see requirements.txt)
 # Fonts are vendored in assets/fonts as TTF, so no network access is needed.
@@ -30,14 +30,18 @@ if [ -z "$PY" ]; then
 fi
 echo "==> using interpreter: $PY"
 
-SCALE="1.5"
-if [ "${1:-}" = "--quick" ]; then SCALE="1"; fi
+SCALE="1.5"            # poster render scale (1.5 -> 3840x2160)
+BOOKLET_SCALE="2.0"    # 2.0 -> A4 at 300 dpi
+if [ "${1:-}" = "--quick" ]; then SCALE="1"; BOOKLET_SCALE="1"; fi
 
 echo "==> rendering infographic (scale ${SCALE})"
 "$PY" tools/build_infographic.py --scale "$SCALE"
 
 echo "==> generating exercise manual"
 "$PY" tools/build_manual.py
+
+echo "==> building Arabic booklet"
+"$PY" tools/build_booklet.py --scale "$BOOKLET_SCALE"
 
 echo
 echo "deliverables in ./output"

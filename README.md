@@ -13,8 +13,14 @@ single content model, so they can never drift apart.
 | File | What it is |
 |---|---|
 | `project-hybrid-infographic.png` | 3840 × 2160 (16:9, 4K) poster — matte black, electric blue / metallic gold anatomy highlights |
-| `project-hybrid-infographic.pdf` | Same artwork as vector-preserving PDF for print |
+| `project-hybrid-infographic.pdf` | Same artwork as PDF for print |
+| `project-hybrid-booklet-ar.pdf` | **كتيّب عربي للطباعة** — 10 pages, A4 (210 × 297 mm) at 300 dpi: cover, weekly overview, one page per training day, recovery, execution rules, scaling guide |
 | `project-hybrid-manual.md` | Exercise manual: prescriptions, start/finish positions, cues, scaling guide, recovery checklist |
+
+The Arabic booklet prints as-is on A4 (single-sided is fine; page 1 is the cover).
+Every page is generated from `plan_data.py` + `booklet_data.py`, and the build
+**fails** if an exercise or muscle has no Arabic translation — the booklet cannot
+silently drift from the poster.
 
 **Design system:** background `#121212` · accents `#00E5FF` (calisthenics) and `#FFD700` (gym)
 · type in Teko (display), Montserrat (headers/UI), Inter (body) · hairline borders, no drop
@@ -50,14 +56,25 @@ python3 -m venv .venv                              # 1. create an isolated envir
 ```
 
 ```bash
-./tools/build_all.sh            # 4K poster, 3840 × 2160 (default)
-./tools/build_all.sh --quick    # 2560 × 1440 quick preview, ~4s
+./tools/build_all.sh            # 4K poster + manual + A4 booklet at 300 dpi (default)
+./tools/build_all.sh --quick    # half resolution everything, fast preview
 PY=python3 ./tools/build_all.sh # force a specific interpreter
 ```
 
-Requires Python 3.8+ with `pillow`, `numpy` and `fontTools` — nothing else, and **no
-internet access** (all fonts are vendored in `assets/fonts`, converted from the
-OFL-licensed Montserrat / Inter / Teko web fonts).
+Individual pieces:
+
+```bash
+python3 tools/build_infographic.py --scale 1.5      # poster
+python3 tools/build_manual.py                       # markdown manual
+python3 tools/build_booklet.py --scale 2.0           # Arabic booklet (2.0 = A4 @300dpi)
+python3 tools/build_booklet.py --scale 1 --pages      # fast preview + page PNGs
+python3 tools/prepare_fonts.py                        # only when changing fonts
+```
+
+Requires Python 3.8+ with `pillow`, `numpy`, `fontTools`, `arabic-reshaper` and
+`python-bidi` — nothing else, and **no internet access** (all fonts are vendored in
+`assets/fonts`, converted from the OFL-licensed Montserrat / Inter / Teko and
+IBM Plex Sans Arabic / Noto Sans Arabic web fonts).
 
 Already have the dependencies system-wide? Skip the venv and run `./tools/build_all.sh`
 directly — the script auto-detects a working interpreter, including a `.venv` in the
@@ -74,10 +91,13 @@ python3 -m venv .venv                       # إنشاء بيئة بايثون �
 ./tools/build_all.sh                        # بناء كل الملفات النهائية
 ```
 
-- النتائج تُحفظ في مجلد **`output/`**: الملصق PNG بدقة 4K، نسخة PDF للطباعة، ودليل التمارين.
+- النتائج تُحفظ في مجلد **`output/`**: الملصق PNG بدقة 4K، نسخة PDF للطباعة،
+  **الكتيّب العربي `project-hybrid-booklet-ar.pdf`** (10 صفحات، مقاس A4، جاهز للطباعة)، ودليل التمارين.
 - لجعل البناء أسرع أثناء التجربة: `./tools/build_all.sh --quick`
 - لتعديل البرنامج التدريبي: غيّر الأرقام والتمارين في **`tools/plan_data.py`** ثم أعد
-  تشغيل الأمر نفسه — الملصق والدليل يتحدّثان معاً.
+  تشغيل الأمر نفسه — الملصق والكتيّب والدليل تتحدّث جميعها معاً.
+- لصياغة النصوص العربية في الكتيّب: **`tools/booklet_data.py`** (أسماء التمارين، الشرح،
+  البدائل، القواعد).
 - على ويندوز استعمل `.venv\Scripts\python.exe` بدل `.venv/bin/python`، وشغّل السكربت
   عبر Git Bash أو WSL.
 
@@ -90,8 +110,13 @@ assets/
   processed/    cropped + background-keyed plates (build cache, gitignored)
 tools/
   plan_data.py          single source of truth for all programme content
-  build_infographic.py  16:9 renderer (pure Pillow: cards, icons, charts, type)
+  booklet_data.py       Arabic wording for the booklet (names, cues, extras)
+  gfx.py                shared drawing primitives (shapes, gradients, icons, type)
+  rtl_text.py           Arabic shaping + bidi + mixed-font line rendering
+  build_infographic.py  16:9 poster renderer
+  build_booklet.py      A4 Arabic booklet renderer (PDF + optional page proofs)
   build_manual.py       markdown manual generator
+  prepare_fonts.py      woff2 -> TTF converter (only when changing fonts)
   build_all.sh          one-command rebuild
 output/         final deliverables
 ```
@@ -110,7 +135,10 @@ loudly instead of silently emitting `.notdef` boxes.
 - Programme design: PROJECT HYBRID (Phase 1 blueprint).
 - Fonts: [Montserrat](https://fonts.google.com/specimen/Montserrat),
   [Inter](https://fonts.google.com/specimen/Inter),
-  [Teko](https://fonts.google.com/specimen/Teko) — SIL Open Font License 1.1.
+  [Teko](https://fonts.google.com/specimen/Teko) (poster) and
+  [IBM Plex Sans Arabic](https://fonts.google.com/specimen/IBMPlexSansArabic),
+  [Noto Sans Arabic](https://fonts.google.com/specimen/NotoSansArabic) (booklet)
+  — all SIL Open Font License 1.1.
 - Anatomy plates in `assets/raw/` are AI-generated illustrations, not medical references.
   They indicate *training emphasis*, not exhaustive anatomical activation.
 

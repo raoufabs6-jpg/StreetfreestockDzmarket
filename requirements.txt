@@ -1,3 +1,5 @@
 pillow>=10.0
 numpy>=1.24
 fonttools>=4.40
+arabic-reshaper>=3.0        # Arabic contextual shaping (booklet)
+python-bidi>=0.4            # RTL reordering + mixed-script runs (booklet)
