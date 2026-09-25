@@ -62,7 +62,12 @@ export function EntityForm<T extends { id: string }>({
   );
 
   const set = (key: string, value: unknown) => {
-    setValues((prev) => ({ ...prev, [key]: value }));
+    setValues((prev) => {
+      const merged = { ...prev, [key]: value };
+      // تعبئة تلقائية (مثل: اختيار بيع مصدر ينسخ بنوده إلى الفاتورة)
+      const patch = config.onFieldChange?.(key, value, merged);
+      return patch ? { ...merged, ...patch } : merged;
+    });
     setErrors((prev) => (prev[key] ? { ...prev, [key]: "" } : prev));
   };
 

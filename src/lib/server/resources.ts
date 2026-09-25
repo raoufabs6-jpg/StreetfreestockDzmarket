@@ -879,39 +879,163 @@ const purchases = guarded("purchases", {
 
 /* --------------------------- الفواتير (Invoices) --------------------------- */
 
+/** لقطة بنود الفاتورة: تحقّق من المنتجات داخل المؤسسة وانسخ أسماءها */
+async function resolveInvoiceItems(
+  ctx: OrgContext,
+  items: Array<{ productId?: string | null; name?: string; quantity: number; price: number }>,
+): Promise<Array<{ productId: string | null; name: string; quantity: number; price: number }>> {
+  if (items.length === 0) return [];
+  const ids = [...new Set(items.map((i) => i.productId).filter((x): x is string => !!x))];
+  const products = ids.length > 0 ? await loadProductsInOrg(ctx, ids) : [];
+  const byId = new Map(products.map((p) => [p.id, p]));
+  return items.map((i) => {
+    if (i.productId) {
+      const p = byId.get(i.productId);
+      if (!p) throw badRequest("الفاتورة: منتج غير موجود في مؤسستك");
+      return { productId: i.productId, name: p.name, quantity: i.quantity, price: i.price };
+    }
+    const name = (i.name ?? "").trim();
+    if (!name) throw badRequest("الفاتورة: كل بند يحتاج منتجًا أو اسمًا");
+    return { productId: null, name, quantity: i.quantity, price: i.price };
+  });
+}
+
 const invoices = guarded("invoices", {
   list: async (ctx) =>
     prisma.invoice.findMany({
       where: { organizationId: ctx.organizationId },
+      include: itemInclude,
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
     }),
   get: async (ctx, id) =>
     findScopedOrThrow(
-      await prisma.invoice.findFirst({ where: { id, organizationId: ctx.organizationId } }),
+      await prisma.invoice.findFirst({
+        where: { id, organizationId: ctx.organizationId },
+        include: itemInclude,
+      }),
     ),
   create: async (ctx, body) => {
     const data = v.invoiceSchema.parse(body);
     await assertCustomerInOrg(ctx, data.customerId);
     await assertNumberFree(ctx, "invoice", data.number);
+
+    // مصدر الفاتورة: بيع داخل نفس المؤسسة (يُنسخ رقمه ليبقى بعد حذف البيع)
+    let saleNumber: string | null = null;
+    if (data.saleId) {
+      const sale = await prisma.sale.findFirst({
+        where: { id: data.saleId, organizationId: ctx.organizationId },
+        select: { number: true },
+      });
+      if (!sale) throw badRequest("المبيعات: بيع مصدر غير موجود في مؤسستك");
+      saleNumber = sale.number;
+    }
+
+    // لقطة البنود (أسماء منسوخة) + مبلغ محسب — الفاتورة لا تلمس المخزون إطلاقًا
+    const items = await resolveInvoiceItems(ctx, data.items);
+    const discount = data.discount ?? 0;
+    let amount = data.amount ?? 0;
+    if (items.length > 0) {
+      amount = Math.max(0, items.reduce((s, i) => s + i.quantity * i.price, 0) - discount);
+    } else if (!(amount > 0)) {
+      throw badRequest("المبلغ يجب أن يكون أكبر من صفر");
+    }
+
     return prisma.invoice.create({
-      data: { ...data, note: data.note ?? null, organizationId: ctx.organizationId },
+      data: {
+        organizationId: ctx.organizationId,
+        customerId: data.customerId,
+        number: data.number,
+        date: data.date,
+        dueDate: data.dueDate,
+        amount,
+        discount,
+        status: data.status,
+        paymentStatus: data.paymentStatus,
+        saleId: data.saleId ?? null,
+        saleNumber,
+        note: data.note ?? null,
+        items: {
+          create: items.map((i) => ({ ...i, organizationId: ctx.organizationId })),
+        },
+      },
+      include: itemInclude,
     });
   },
   update: async (ctx, id, body) => {
     const data = v.invoiceSchema.partial().parse(body);
     const existing = await findScopedOrThrow(
-      await prisma.invoice.findFirst({ where: { id, organizationId: ctx.organizationId } }),
+      await prisma.invoice.findFirst({
+        where: { id, organizationId: ctx.organizationId },
+        include: itemInclude,
+      }),
     );
     if (data.customerId) await assertCustomerInOrg(ctx, data.customerId);
     if (data.number && data.number !== existing.number) {
       await assertNumberFree(ctx, "invoice", data.number, id);
     }
-    return prisma.invoice.update({ where: { id }, data });
+
+    let saleNumber = existing.saleNumber;
+    if (data.saleId !== undefined) {
+      if (data.saleId) {
+        const sale = await prisma.sale.findFirst({
+          where: { id: data.saleId, organizationId: ctx.organizationId },
+          select: { number: true },
+        });
+        if (!sale) throw badRequest("المبيعات: بيع مصدر غير موجود في مؤسستك");
+        saleNumber = sale.number;
+      } else {
+        saleNumber = null;
+      }
+    }
+
+    // المبلغ يُعاد حسابه من البنود والخصم — الفواتير القديمة بلا بنود تبقى بمبلغها اليدوي
+    const nextItems =
+      data.items !== undefined ? await resolveInvoiceItems(ctx, data.items) : existing.items;
+    const nextDiscount = data.discount ?? existing.discount;
+    let nextAmount = existing.amount;
+    if (nextItems.length > 0) {
+      nextAmount = Math.max(
+        0,
+        nextItems.reduce((s, i) => s + i.quantity * i.price, 0) - nextDiscount,
+      );
+    } else if (data.amount !== undefined) {
+      nextAmount = data.amount;
+    }
+
+    return prisma.invoice.update({
+      where: { id },
+      data: {
+        number: data.number ?? existing.number,
+        date: data.date ?? existing.date,
+        dueDate: data.dueDate ?? existing.dueDate,
+        customerId: data.customerId ?? existing.customerId,
+        saleId: data.saleId !== undefined ? data.saleId : existing.saleId,
+        saleNumber,
+        amount: nextAmount,
+        discount: nextDiscount,
+        status: data.status ?? existing.status,
+        paymentStatus: data.paymentStatus ?? existing.paymentStatus,
+        note: data.note !== undefined ? data.note : existing.note,
+        ...(data.items !== undefined
+          ? {
+              items: {
+                deleteMany: {},
+                create: nextItems.map((i) => ({
+                  ...i,
+                  organizationId: ctx.organizationId,
+                })),
+              },
+            }
+          : {}),
+      },
+      include: itemInclude,
+    });
   },
   remove: async (ctx, id) => {
     await findScopedOrThrow(
       await prisma.invoice.findFirst({ where: { id, organizationId: ctx.organizationId } }),
     );
+    // البنود تُحذف تلقائيًا (Cascade) — المدفوعات تبقى مرتبطتها NULL
     await prisma.invoice.delete({ where: { id } });
   },
 });

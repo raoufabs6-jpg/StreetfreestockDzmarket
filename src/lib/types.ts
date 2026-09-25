@@ -80,14 +80,30 @@ export interface Purchase extends BaseRecord {
 
 export type InvoiceStatus = "draft" | "sent" | "paid" | "overdue";
 
-/** فاتورة ضريبية/تحصيل (Invoice) */
+/** بند فاتورة — لقطة مستقلة (الاسم منسوخ عند الإصدار) */
+export interface InvoiceItem {
+  productId: string | null;
+  /** اسم المنتج وقت إصدار الفاتورة */
+  name?: string;
+  quantity: number;
+  price: number;
+}
+
+/** فاتورة احترافية (بيع/تحصيل) قابلة للطباعة A4 */
 export interface Invoice extends BaseRecord {
   number: string;
   date: string;
   dueDate: string;
   customerId: ID;
+  /** البيع المصدر (لقطة) — اختياري للفواتير اليدوية */
+  saleId?: ID | null;
+  saleNumber?: string | null;
+  discount: number;
   amount: number;
   status: InvoiceStatus;
+  /** حالة الدفع: paid / partial / unpaid */
+  paymentStatus: PaymentStatus;
+  items: InvoiceItem[];
   note: string;
 }
 

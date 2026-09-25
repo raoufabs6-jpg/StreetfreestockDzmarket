@@ -84,6 +84,15 @@ export interface EntityConfig<T extends { id: string }> {
   rowLink?: (row: T) => string;
   rowName: (row: T) => string;
   validate?: (values: Record<string, unknown>) => string | null;
+  /**
+   * تعبئة حقول النموذج تلقائيًا عند تغيير حقل —
+   * مثل اختيار «بيع مصدر» يعيد نسخ بنود العميل والخصم إلى الفاتورة
+   */
+  onFieldChange?: (
+    key: string,
+    value: unknown,
+    current: Record<string, unknown>,
+  ) => Partial<Record<string, unknown>> | null;
   /** حذف محظور (مثل حسابك الحالي) — يُرجع رسالة الخطأ */
   blockDelete?: (row: T) => string | null;
   perPage?: number;
@@ -118,6 +127,7 @@ interface BuildCtx {
     customers: Customer[];
     suppliers: Supplier[];
     products: Product[];
+    sales: Sale[];
     currentUserId: string | null;
   };
 }
@@ -571,19 +581,50 @@ const builders: { [K in EntityKey]: (ctx: BuildCtx) => EntityConfig<EntityMap[K]
       rowName: (r) => r.number,
       dateRangeKey: "date",
       sort: (a, b) => b.date.localeCompare(a.date),
+      // صفحة الفاتورة: عرض احترافي + طباعة A4 + تحميل PDF
+      rowLink: (r) => `/invoices/${r.id}`,
       defaultValues: (rows) => ({
         number: nextDocNumber(rows, "INV-"),
         date: todayISO(),
         dueDate: daysAgoISO(-15),
         customerId: "",
-        amount: 0,
+        saleId: "",
+        items: [],
+        discount: 0,
         status: "draft",
+        paymentStatus: "unpaid",
         note: "",
       }),
+      // اختيار «بيع مصدر» ينسخ العميل والبنود والخصم وحالة الدفع (لقطة ثابتة)
+      onFieldChange: (key, value, current) => {
+        if (key !== "saleId" || !value) return null;
+        const sale = deps.sales.find((s) => s.id === value);
+        if (!sale) return null;
+        return {
+          customerId: sale.customerId,
+          items: sale.items.map((i) => ({
+            productId: i.productId,
+            quantity: i.quantity,
+            price: i.price,
+          })),
+          discount: sale.discount ?? 0,
+          paymentStatus: sale.paymentStatus ?? "unpaid",
+        };
+      },
       fields: [
         { key: "number", label: t("field.number"), kind: "text", required: true },
         { key: "date", label: t("field.docDate"), kind: "date", required: true },
         { key: "dueDate", label: t("field.dueDate"), kind: "date", required: true },
+        {
+          key: "saleId",
+          label: t("invoice.sourceSale"),
+          kind: "select",
+          options: deps.sales.map((s) => ({
+            value: s.id,
+            label: `${s.number} — ${nameOf(deps.customers, s.customerId)}`,
+          })),
+          placeholder: t("invoice.sourceSalePlaceholder"),
+        },
         {
           key: "customerId",
           label: t("field.customer"),
@@ -592,10 +633,35 @@ const builders: { [K in EntityKey]: (ctx: BuildCtx) => EntityConfig<EntityMap[K]
           options: deps.customers.map((c) => ({ value: c.id, label: c.name })),
           placeholder: t("common.selectPlaceholder"),
         },
-        { key: "amount", label: t("common.amount"), kind: "currency", required: true, min: 0 },
+        {
+          key: "items",
+          label: t("field.items"),
+          kind: "items",
+          required: true,
+          span: 2,
+          priceMode: "sale",
+          productOptions: deps.products
+            .filter((p) => p.status !== "inactive")
+            .map((p) => ({
+              value: p.id,
+              label: `${p.name} — ${p.sku}`,
+              price: p.unitPrice,
+            })),
+        },
+        { key: "discount", label: t("common.discount"), kind: "currency", min: 0 },
+        {
+          key: "paymentStatus",
+          label: t("field.paymentStatus"),
+          kind: "select",
+          required: true,
+          options: (["paid", "unpaid", "partial"] as const).map((s) => ({
+            value: s,
+            label: t(`enum.payment.${s}` as MessageKey),
+          })),
+        },
         {
           key: "status",
-          label: t("common.status"),
+          label: t("invoice.workflowStatus"),
           kind: "select",
           required: true,
           options: (["draft", "sent", "paid", "overdue"] as const).map((s) => ({
@@ -610,7 +676,16 @@ const builders: { [K in EntityKey]: (ctx: BuildCtx) => EntityConfig<EntityMap[K]
         { key: "customer", header: t("field.customer"), render: (r) => nameOf(deps.customers, r.customerId) },
         { key: "date", header: t("common.date"), render: (r) => formatDate(r.date, lang), hideBelow: "sm" },
         { key: "due", header: t("field.dueDate"), render: (r) => formatDate(r.dueDate, lang), hideBelow: "lg" },
-        { key: "amount", header: t("common.amount"), render: (r) => <span className="font-bold text-slate-900">{money(r.amount)}</span> },
+        { key: "amount", header: t("common.total"), render: (r) => <span className="font-bold text-slate-900">{money(r.amount)}</span> },
+        {
+          key: "paymentStatus",
+          header: t("field.paymentStatus"),
+          render: (r) => (
+            <Badge tone={paymentTone[r.paymentStatus ?? "unpaid"] ?? "slate"}>
+              {t(`enum.payment.${r.paymentStatus ?? "unpaid"}` as MessageKey)}
+            </Badge>
+          ),
+        },
         {
           key: "status",
           header: t("common.status"),
@@ -619,6 +694,15 @@ const builders: { [K in EntityKey]: (ctx: BuildCtx) => EntityConfig<EntityMap[K]
         },
       ],
       filters: [
+        {
+          id: "paymentStatus",
+          label: t("field.paymentStatus"),
+          options: (["paid", "unpaid", "partial"] as const).map((s) => ({
+            value: s,
+            label: t(`enum.payment.${s}` as MessageKey),
+          })),
+          apply: (r, v) => (v ? (r.paymentStatus ?? "unpaid") === v : true),
+        },
         {
           id: "status",
           label: t("common.status"),
@@ -806,6 +890,7 @@ export function useEntityConfig<K extends EntityKey>(key: K): EntityConfig<Entit
   const { rows: customers } = useCollection<Customer>("customers");
   const { rows: suppliers } = useCollection<Supplier>("suppliers");
   const { rows: products } = useCollection<Product>("products");
+  const { rows: sales } = useCollection<Sale>("sales");
 
   const currency = settings?.currency ?? "DZD";
 
@@ -814,7 +899,13 @@ export function useEntityConfig<K extends EntityKey>(key: K): EntityConfig<Entit
       t,
       lang,
       currency,
-      deps: { customers, suppliers, products, currentUserId: user?.id ?? settings?.currentUserId ?? null },
+      deps: {
+        customers,
+        suppliers,
+        products,
+        sales,
+        currentUserId: user?.id ?? settings?.currentUserId ?? null,
+      },
     });
     // خيارات فلتر الفئات (المنتجات) تُملأ ديناميكيًا
     if (key === "products" && config.filters) {
@@ -833,7 +924,7 @@ export function useEntityConfig<K extends EntityKey>(key: K): EntityConfig<Entit
       }
     }
     return config;
-  }, [key, t, lang, currency, customers, suppliers, products, user?.id, settings?.currentUserId]);
+  }, [key, t, lang, currency, customers, suppliers, products, sales, user?.id, settings?.currentUserId]);
 }
 
 /** اختصارات عملة للقوائم المنسدلة في أماكن أخرى */

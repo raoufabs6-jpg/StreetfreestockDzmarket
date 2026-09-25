@@ -115,6 +115,7 @@ model Organization {
   purchases          Purchase[]
   purchaseItems      PurchaseItem[]
   invoices           Invoice[]
+  invoiceItems       InvoiceItem[]
   expenses           Expense[]
   payments           Payment[]
   notifications      Notification[]
@@ -418,6 +419,15 @@ model Invoice {
   dueDate String // YYYY-MM-DD
   amount Float
   status invoiceStatus @default(draft)
+  /// حالة الدفع المالية: paid / partial / unpaid
+  paymentStatus paymentStatus @default(unpaid)
+  discount      Float         @default(0)
+
+  /// البيع المصدر للفاتورة (لقطة) — أعمدة بدون FK: الفاتورة تبقى بعد حذف البيع
+  saleId     String?
+  saleNumber String?
+
+  items InvoiceItem[]
   note   String?
 
   createdAt DateTime @default(now())
@@ -428,6 +438,29 @@ model Invoice {
   @@unique([organizationId, number])
   @@index([organizationId, date])
   @@index([organizationId, status])
+  @@index([organizationId, saleId])
+}
+
+/// بنود الفاتورة — لقطة مستقلة (اسم المنتج مُنسوخ عند الإصدار)
+model InvoiceItem {
+  id             String  @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  /// بدون FK — يبقى سجل الفاتورة كاملًا حتى لو حُذف المنتج
+  productId String?
+  /// اسم المنتج وقت إصدار الفاتورة (لقطة ثابتة)
+  name      String
+  quantity  Int
+  price     Float
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId, invoiceId])
 }
 
 model Expense {

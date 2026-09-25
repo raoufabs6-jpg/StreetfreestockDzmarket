@@ -121,13 +121,22 @@ export function buildSeed(): SeedData {
     });
   });
 
+  // لقطة بنود البيع للفاتورة (الأسماء تُنسخ وقت الإصدار)
+  const snap = (s: Sale) =>
+    s.items.map((i) => ({
+      productId: i.productId,
+      name: products.find((p) => p.id === i.productId)?.name ?? "",
+      quantity: i.quantity,
+      price: i.price,
+    }));
+
   const invoices: Invoice[] = [
-    base<Invoice>("inv-1", 30, { number: "INV-0001", date: daysAgoISO(30), dueDate: daysAgoISO(15), customerId: "cus-1", amount: docTotal(sales[0].items, sales[0].discount), status: "paid", note: "" }),
-    base<Invoice>("inv-2", 20, { number: "INV-0002", date: daysAgoISO(20), dueDate: daysAgoISO(5), customerId: "cus-2", amount: docTotal(sales[1].items, sales[1].discount), status: "paid", note: "" }),
-    base<Invoice>("inv-3", 15, { number: "INV-0003", date: daysAgoISO(15), dueDate: daysAgoISO(-1), customerId: "cus-1", amount: docTotal(sales[3].items, sales[3].discount), status: "sent", note: "بانتظار التحويل البنكي" }),
-    base<Invoice>("inv-4", 10, { number: "INV-0004", date: daysAgoISO(10), dueDate: daysAgoISO(-4), customerId: "cus-4", amount: docTotal(sales[4].items, sales[4].discount), status: "overdue", note: "" }),
-    base<Invoice>("inv-5", 4, { number: "INV-0005", date: daysAgoISO(4), dueDate: daysAgoISO(10), customerId: "cus-5", amount: docTotal(sales[5].items, sales[5].discount), status: "sent", note: "" }),
-    base<Invoice>("inv-6", 1, { number: "INV-0006", date: daysAgoISO(1), dueDate: daysAgoISO(15), customerId: "cus-3", amount: docTotal(sales[9].items, sales[9].discount), status: "draft", note: "" }),
+    base<Invoice>("inv-1", 30, { number: "INV-0001", date: daysAgoISO(30), dueDate: daysAgoISO(15), customerId: "cus-1", saleId: sales[0].id, saleNumber: sales[0].number, items: snap(sales[0]), discount: sales[0].discount, amount: docTotal(sales[0].items, sales[0].discount), status: "paid", paymentStatus: sales[0].paymentStatus, note: "" }),
+    base<Invoice>("inv-2", 20, { number: "INV-0002", date: daysAgoISO(20), dueDate: daysAgoISO(5), customerId: "cus-2", saleId: sales[1].id, saleNumber: sales[1].number, items: snap(sales[1]), discount: sales[1].discount, amount: docTotal(sales[1].items, sales[1].discount), status: "paid", paymentStatus: sales[1].paymentStatus, note: "" }),
+    base<Invoice>("inv-3", 15, { number: "INV-0003", date: daysAgoISO(15), dueDate: daysAgoISO(-1), customerId: "cus-1", saleId: sales[3].id, saleNumber: sales[3].number, items: snap(sales[3]), discount: sales[3].discount, amount: docTotal(sales[3].items, sales[3].discount), status: "sent", paymentStatus: sales[3].paymentStatus, note: "بانتظار التحويل البنكي" }),
+    base<Invoice>("inv-4", 10, { number: "INV-0004", date: daysAgoISO(10), dueDate: daysAgoISO(-4), customerId: "cus-4", saleId: sales[4].id, saleNumber: sales[4].number, items: snap(sales[4]), discount: sales[4].discount, amount: docTotal(sales[4].items, sales[4].discount), status: "overdue", paymentStatus: sales[4].paymentStatus, note: "" }),
+    base<Invoice>("inv-5", 4, { number: "INV-0005", date: daysAgoISO(4), dueDate: daysAgoISO(10), customerId: "cus-5", saleId: sales[5].id, saleNumber: sales[5].number, items: snap(sales[5]), discount: sales[5].discount, amount: docTotal(sales[5].items, sales[5].discount), status: "sent", paymentStatus: sales[5].paymentStatus, note: "" }),
+    base<Invoice>("inv-6", 1, { number: "INV-0006", date: daysAgoISO(1), dueDate: daysAgoISO(15), customerId: "cus-3", saleId: sales[9].id, saleNumber: sales[9].number, items: snap(sales[9]), discount: sales[9].discount, amount: docTotal(sales[9].items, sales[9].discount), status: "draft", paymentStatus: sales[9].paymentStatus, note: "" }),
   ];
 
   const expenses: Expense[] = [

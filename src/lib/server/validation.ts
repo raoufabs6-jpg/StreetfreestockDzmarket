@@ -107,15 +107,45 @@ export const purchaseSchema = z.object({
 
 export const invoiceStatusValues = ["draft", "sent", "paid", "overdue"] as const;
 
-export const invoiceSchema = z.object({
-  number: numberStr,
-  date: dateString,
-  dueDate: dateString,
-  customerId: z.string().min(1, "اختر العميل"),
-  amount: money.refine((v) => v > 0, "المبلغ يجب أن يكون أكبر من صفر"),
-  status: z.enum(invoiceStatusValues, { message: "حالة فاتورة غير صالحة" }),
-  note,
+/** بند فاتورة — الاسم لقطة تُحقن من المنتج عند الإصدار */
+export const invoiceItemSchema = z.object({
+  productId: z.string().min(1).nullable().optional(),
+  name: z.string().max(300).optional().default(""),
+  quantity: qty,
+  price: money,
 });
+
+export const invoiceSchema = z
+  .object({
+    number: numberStr,
+    date: dateString,
+    dueDate: dateString,
+    customerId: z.string().min(1, "اختر العميل"),
+    saleId: z
+      .string()
+      .transform((v) => v || null)
+      .nullable()
+      .optional(),
+    discount: optionalMoney.default(0),
+    /** مع البنود يُحسب على الخادم — بدون بنود: مبلغ يدوي (لقطة التوافق) */
+    amount: optionalMoney.optional(),
+    status: z.enum(invoiceStatusValues, { message: "حالة فاتورة غير صالحة" }),
+    paymentStatus: z
+      .enum(paymentStatusValues, { message: "حالة دفع غير صالحة" })
+      .default("unpaid"),
+    items: z.array(invoiceItemSchema).max(500, "بنود كثيرة جدًا").default([]),
+    note,
+  })
+  .superRefine((v, ctx) => {
+    // بدون بنود: المبلغ اليدوي مطلوب وأكبر من صفر (يُتحقّق أيضًا على الخادم عند الإنشاء)
+    if ((v.items?.length ?? 0) === 0 && v.amount !== undefined && !(v.amount > 0)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["amount"],
+        message: "المبلغ يجب أن يكون أكبر من صفر",
+      });
+    }
+  });
 
 export const expenseCategoryValues = [
   "rent",

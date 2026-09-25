@@ -10,6 +10,7 @@ import {
   DEFAULT_ROLE_PERMISSIONS,
   type BusinessSettings,
   type CollectionName,
+  type Invoice,
   type Product,
   type StockMovement,
 } from "@/lib/types";
@@ -79,7 +80,11 @@ class LocalStorageProvider implements DataProvider {
 
   async create<T>(collection: CollectionName, value: T & { id: string }): Promise<T> {
     const rows = this.rows<T>(collection);
-    const incoming = value as T & { id: string; createdAt?: string };
+    const base = value as T & { id: string; createdAt?: string };
+    // الفاتورة: لقطة بنود بأسماء منسوخة + مبلغ محسب (مطابق لسلوك الخادم)
+    const incoming = (
+      collection === "invoices" ? this.finalizeInvoice(base as unknown as Invoice) : base
+    ) as T & { id: string; createdAt?: string };
     const record = { ...incoming, createdAt: incoming.createdAt ?? new Date().toISOString() } as T;
     rows.unshift(record);
     this.save(collection, rows);
@@ -88,6 +93,38 @@ class LocalStorageProvider implements DataProvider {
       this.applyMovement(record as unknown as StockMovement);
     }
     return record;
+  }
+
+  /** إتمام الفاتورة: أسماء بنود منسوخة، مبلغ = (مجموع − خصم)، رقم البيع المصدر */
+  private finalizeInvoice(inv: Invoice): Invoice {
+    const products = this.rows<Product>("products");
+    const items = (inv.items ?? []).map((i) => ({
+      productId: i.productId ?? null,
+      name:
+        i.name?.trim() ||
+        products.find((p) => p.id === i.productId)?.name ||
+        "",
+      quantity: i.quantity,
+      price: i.price,
+    }));
+    const discount = inv.discount ?? 0;
+    let amount = inv.amount ?? 0;
+    if (items.length > 0) {
+      amount = Math.max(
+        0,
+        items.reduce((s, i) => s + i.quantity * i.price, 0) - discount,
+      );
+    } else if (!(amount > 0)) {
+      throw new Error("amount_required");
+    }
+    let saleNumber: string | null = null;
+    if (inv.saleId) {
+      const sale = this.rows<{ id: string; number: string }>("sales").find(
+        (s) => s.id === inv.saleId,
+      );
+      saleNumber = sale?.number ?? inv.saleNumber ?? null; // بيع محذوف → الرقم المنسوخ يبقى
+    }
+    return { ...inv, items, discount, amount, saleNumber };
   }
 
   /** تطبيق حركة على مخزون المنتج — in تزيد، out تنقص، adjust تعيّن الكمية */
@@ -107,7 +144,11 @@ class LocalStorageProvider implements DataProvider {
     const rows = this.rows<T>(collection);
     const idx = rows.findIndex((r) => (r as { id?: string }).id === id);
     if (idx === -1) throw new Error("record_not_found");
-    const updated = { ...rows[idx], ...patch, id };
+    let updated: T = { ...rows[idx], ...patch, id } as T;
+    // تعديل فاتورة → يُعاد حساب اللقطة/المبلغ (مطابق لسلوك الخادم)
+    if (collection === "invoices") {
+      updated = this.finalizeInvoice(updated as unknown as Invoice) as unknown as T;
+    }
     rows[idx] = updated;
     this.save(collection, rows);
     return updated;
