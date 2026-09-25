@@ -138,3 +138,62 @@ body {
     transform: translateY(0) scale(1);
   }
 }
+
+/* ============================================================
+   طباعة الفاتورة A4 — إخفاء واجهة التطبيق والإبقاء على الورقة فقط
+   ============================================================ */
+@media print {
+  @page {
+    size: A4;
+    margin: 10mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  /* شريط الأدوات + قشرة التطبيق (الشريط الجانبي/الهيدر/الشريط السفلي) */
+  .no-print,
+  .app-no-print {
+    display: none !important;
+  }
+
+  /* إزالة إزاحات الحاوية الرئيسية عند الطباعة */
+  .app-content {
+    padding: 0 !important;
+    min-height: auto !important;
+  }
+
+  .app-content > main {
+    padding: 0 !important;
+  }
+
+  /* الورقة: بلا ظل/إطار/هوامش شاشة — عرض الصفحة كاملًا */
+  .invoice-print-root {
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .invoice-sheet {
+    width: 100% !important;
+    max-width: none !important;
+    min-height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
+  /* منع كسر الصفوف/الكتل بين الصفحات */
+  .avoid-break,
+  .invoice-sheet thead {
+    break-inside: avoid;
+  }
+
+  .invoice-sheet tr {
+    break-inside: avoid;
+  }
+}

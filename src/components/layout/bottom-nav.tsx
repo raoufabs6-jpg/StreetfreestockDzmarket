@@ -19,7 +19,7 @@ export function BottomNav({ onOpenMenu }: { onOpenMenu: () => void }) {
   ];
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur md:hidden">
+    <nav className="app-no-print fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur md:hidden">
       <ul className="mx-auto grid max-w-md grid-cols-5">
         {items.map((item) => {
           const Icon = item.icon;

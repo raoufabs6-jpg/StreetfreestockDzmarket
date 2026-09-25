@@ -154,6 +154,7 @@ export const en: Record<MessageKey, string> = {
   "invoice.sourceSalePlaceholder": "Manual invoice — or pick a sale to prefill",
   "invoice.workflowStatus": "Invoice status",
   "invoice.docTitle": "Invoice",
+  "invoice.company": "Company",
   "invoice.print": "Print Invoice",
   "invoice.downloadPdf": "Download PDF",
   "invoice.pdfGenerating": "Generating PDF…",

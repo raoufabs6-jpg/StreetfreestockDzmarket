@@ -38,13 +38,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen">
       {/* Sidebar — سطح المكتب */}
-      <div className="fixed inset-y-0 start-0 z-40 hidden md:block">
+      <div className="app-no-print fixed inset-y-0 start-0 z-40 hidden md:block">
         <Sidebar collapsed={collapsed} onToggleCollapse={toggleCollapse} />
       </div>
 
       {/* درج الهاتف */}
       {drawerOpen && (
-        <div className="fixed inset-0 z-50 md:hidden">
+        <div className="app-no-print fixed inset-0 z-50 md:hidden">
           <div
             className="absolute inset-0 bg-slate-900/40 animate-fade-in"
             onClick={() => setDrawerOpen(false)}
@@ -59,7 +59,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* المحتوى */}
       <div
         className={cn(
-          "flex min-h-screen flex-col transition-[padding] duration-200",
+          "app-content flex min-h-screen flex-col transition-[padding] duration-200",
           collapsed ? "md:ps-20" : "md:ps-64",
         )}
       >

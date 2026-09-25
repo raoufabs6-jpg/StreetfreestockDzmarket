@@ -159,6 +159,7 @@ export const ar = {
   "invoice.sourceSalePlaceholder": "فاتورة يدوية — أو اختر بيعًا لتعبئتها",
   "invoice.workflowStatus": "حالة الفاتورة",
   "invoice.docTitle": "فاتورة",
+  "invoice.company": "المؤسسة",
   "invoice.print": "طباعة الفاتورة",
   "invoice.downloadPdf": "تحميل PDF",
   "invoice.pdfGenerating": "جارٍ إنشاء ملف PDF…",

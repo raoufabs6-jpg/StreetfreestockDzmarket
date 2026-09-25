@@ -154,6 +154,7 @@ export const fr: Record<MessageKey, string> = {
   "invoice.sourceSalePlaceholder": "Facture manuelle — ou choisissez une vente à remplir",
   "invoice.workflowStatus": "État de la facture",
   "invoice.docTitle": "Facture",
+  "invoice.company": "Entreprise",
   "invoice.print": "Imprimer la facture",
   "invoice.downloadPdf": "Télécharger le PDF",
   "invoice.pdfGenerating": "Génération du PDF…",

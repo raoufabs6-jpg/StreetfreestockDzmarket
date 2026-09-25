@@ -693,6 +693,105 @@ async function main() {
   const s9 = await getStock();
   ok(s9 === 6, "حذف البيع يعكس الحركة المرتبطة فقط (4 ← 6 = +2)", s9);
 
+  /* ---------- 11) نظام الفواتير الاحترافي ---------- */
+  console.log("\n[11] الفواتير: لقطة من بيع + مبلغ محسب + صفحة طباعة A4");
+
+  // بيع خاص بالقسم (خصم 10 + دفع جزئي) — المخزون يتحرك لأن هذا بيع
+  const saleForInvoice = await call("POST", "/api/v1/sales", E, {
+    number: "SAL-INV-1",
+    date: "2026-09-25",
+    customerId: custA.id,
+    items: [{ productId: prodA.id, quantity: 3, price: 100 }],
+    discount: 10,
+    paymentStatus: "partial",
+    note: "",
+  });
+  ok(saleForInvoice.status === 201, "بيع مصدر للفاتورة → 201", saleForInvoice.status);
+  const saleForInvoiceId = saleForInvoice.json?.data?.id;
+
+  // إنشاء فاتورة مرتبطة (بنود + خصم + حالة دفع + رقم تلقائي INV-)
+  const invoice = await call("POST", "/api/v1/invoices", E, {
+    number: "INV-ERP-1",
+    date: "2026-09-25",
+    dueDate: "2026-10-10",
+    customerId: custA.id,
+    saleId: saleForInvoiceId,
+    items: [{ productId: prodA.id, quantity: 3, price: 100 }],
+    discount: 10,
+    paymentStatus: "partial",
+    status: "sent",
+    note: "فاتورة اختبار",
+  });
+  ok(invoice.status === 201, "إنشاء فاتورة (بنود + خصم) → 201", invoice.status);
+  const invId = invoice.json?.data?.id;
+  ok(invoice.json?.data?.amount === 290, "الإجمالي محسب: 300 − خصم 10 = 290", invoice.json?.data?.amount);
+  ok(invoice.json?.data?.items?.[0]?.name === "منتج أ", "اسم المنتج منسوخ في لقطة البند", invoice.json?.data?.items?.[0]);
+  ok(invoice.json?.data?.saleNumber === "SAL-INV-1", "رقم البيع المصدر منسوخ في الفاتورة", invoice.json?.data?.saleNumber);
+  ok(invoice.json?.data?.paymentStatus === "partial", "حالة الدفع partial محفوظة", invoice.json?.data?.paymentStatus);
+
+  // رقم مكرر → 409 (الرقم التلقائي INV- لا يتكرر)
+  const dupInvoice = await call("POST", "/api/v1/invoices", E, {
+    number: "INV-ERP-1",
+    date: "2026-09-25",
+    dueDate: "2026-10-10",
+    customerId: custA.id,
+    amount: 100,
+    status: "draft",
+    note: "",
+  });
+  ok(dupInvoice.status === 409, "رقم فاتورة مكرر → 409", dupInvoice.status);
+
+  // الفاتورة لا تلمس المخزون إطلاقًا
+  const stockAfterInvoice = await getStock();
+  ok(stockAfterInvoice === 3, "الفاتورة لا تغيّر المخزون (البيع فقط)", stockAfterInvoice);
+
+  // تعديل الخصم يعيد حساب الإجمالي ويحفظ حالة الدفع
+  const patchDiscount = await call("PATCH", `/api/v1/invoices/${invId}`, E, { discount: 0 });
+  ok(patchDiscount.status === 200 && patchDiscount.json?.data?.amount === 300, "خصم 0 → الإجمالي 300", patchDiscount.json?.data);
+  ok(patchDiscount.json?.data?.paymentStatus === "partial", "التعديل الجزئي لا يمسّ حالة الدفع", patchDiscount.json?.data?.paymentStatus);
+
+  // اللقطة مستقلة: تعديل البيع لاحقًا لا يغيّر الفاتورة
+  const patchSaleAfter = await call("PATCH", `/api/v1/sales/${saleForInvoiceId}`, E, {
+    items: [{ productId: prodA.id, quantity: 2, price: 100 }],
+  });
+  ok(patchSaleAfter.status === 200, "تعديل بنود البيع بعد الإصدار → 200", patchSaleAfter.status);
+  const invAfterSaleEdit = await call("GET", `/api/v1/invoices/${invId}`, E);
+  ok(invAfterSaleEdit.json?.data?.amount === 300, "الفاتورة لم تتغير بعد تعديل البيع (300)", invAfterSaleEdit.json?.data?.amount);
+  ok(invAfterSaleEdit.json?.data?.items?.[0]?.quantity === 3, "بنود الفاتورة لقطة ثابتة (3 قطع)", invAfterSaleEdit.json?.data?.items?.[0]?.quantity);
+
+  // صفحة الفاتورة (عرض A4): 200 بالجلسة، تحويل بدونها
+  const invoicePage = await fetch(`${BASE}/invoices/${invId}`, {
+    headers: { cookie: E },
+    redirect: "manual",
+  });
+  ok(invoicePage.status === 200, "صفحة الفاتورة A4 → 200", invoicePage.status);
+  const invoiceNoSession = await fetch(`${BASE}/invoices/${invId}`, { redirect: "manual" });
+  ok(
+    invoiceNoSession.status >= 300 && invoiceNoSession.status < 400,
+    "صفحة الفاتورة بدون جلسة → تحويل",
+    invoiceNoSession.status,
+  );
+
+  // توافق المسار القديم: فاتورة بمبلغ يدوي بلا بنود
+  const legacyInvoice = await call("POST", "/api/v1/invoices", E, {
+    number: "INV-ERP-2",
+    date: "2026-09-25",
+    dueDate: "2026-10-10",
+    customerId: custA.id,
+    amount: 500,
+    status: "draft",
+    note: "",
+  });
+  ok(legacyInvoice.status === 201 && legacyInvoice.json?.data?.amount === 500, "فاتورة يدوية بلا بنود → 201 (مبلغ محفوظ)", legacyInvoice.json?.data);
+
+  // حذف الفاتورة لا يمسّ المخزون ولا يمسّ البيع
+  const deleteInvoice = await call("DELETE", `/api/v1/invoices/${invId}`, E);
+  ok(deleteInvoice.status === 200, "حذف فاتورة → 200", deleteInvoice.status);
+  const stockAfterInvoiceDelete = await getStock();
+  ok(stockAfterInvoiceDelete === 4, "حذف الفاتورة لا يغيّر المخزون (بيع فقط خصم −1 ← 4)", stockAfterInvoiceDelete);
+  const saleStillThere = await call("GET", `/api/v1/sales/${saleForInvoiceId}`, E);
+  ok(saleStillThere.status === 200, "البيع المصدري سليم بعد حذف الفاتورة", saleStillThere.status);
+
   await pg.end();
 
   console.log(`\n════════ النتيجة: ${passed} نجح / ${failed} فشل ════════`);

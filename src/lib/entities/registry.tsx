@@ -596,7 +596,7 @@ const builders: { [K in EntityKey]: (ctx: BuildCtx) => EntityConfig<EntityMap[K]
         note: "",
       }),
       // اختيار «بيع مصدر» ينسخ العميل والبنود والخصم وحالة الدفع (لقطة ثابتة)
-      onFieldChange: (key, value, current) => {
+      onFieldChange: (key, value) => {
         if (key !== "saleId" || !value) return null;
         const sale = deps.sales.find((s) => s.id === value);
         if (!sale) return null;

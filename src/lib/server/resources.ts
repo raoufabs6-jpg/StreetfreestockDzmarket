@@ -931,7 +931,7 @@ const invoices = guarded("invoices", {
     }
 
     // لقطة البنود (أسماء منسوخة) + مبلغ محسب — الفاتورة لا تلمس المخزون إطلاقًا
-    const items = await resolveInvoiceItems(ctx, data.items);
+    const items = await resolveInvoiceItems(ctx, data.items ?? []);
     const discount = data.discount ?? 0;
     let amount = data.amount ?? 0;
     if (items.length > 0) {
@@ -950,7 +950,7 @@ const invoices = guarded("invoices", {
         amount,
         discount,
         status: data.status,
-        paymentStatus: data.paymentStatus,
+        paymentStatus: data.paymentStatus ?? "unpaid",
         saleId: data.saleId ?? null,
         saleNumber,
         note: data.note ?? null,
@@ -999,6 +999,7 @@ const invoices = guarded("invoices", {
         nextItems.reduce((s, i) => s + i.quantity * i.price, 0) - nextDiscount,
       );
     } else if (data.amount !== undefined) {
+      if (!(data.amount > 0)) throw badRequest("المبلغ يجب أن يكون أكبر من صفر");
       nextAmount = data.amount;
     }
 
