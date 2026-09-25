@@ -5,6 +5,7 @@
 // ============================================================
 
 import type { BusinessSettings, CollectionName } from "@/lib/types";
+import type { PlanId, SubscriptionInfo } from "@/lib/plans";
 import { emitDataChanged, type DataProvider } from "./provider";
 
 interface ApiErrorBody {
@@ -103,6 +104,19 @@ class ApiProvider implements DataProvider {
     const next = await this.request<BusinessSettings>("/api/settings", {
       method: "PUT",
       body: patch,
+    });
+    emitDataChanged();
+    return next;
+  }
+
+  async getSubscription(): Promise<SubscriptionInfo> {
+    return this.request<SubscriptionInfo>("/api/subscription");
+  }
+
+  async setPlan(plan: PlanId): Promise<SubscriptionInfo> {
+    const next = await this.request<SubscriptionInfo>("/api/subscription", {
+      method: "PUT",
+      body: { plan },
     });
     emitDataChanged();
     return next;

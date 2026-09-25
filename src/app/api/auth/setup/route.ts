@@ -7,6 +7,7 @@ import { prisma } from "@/lib/server/db";
 import { setupSchema } from "@/lib/server/validation";
 import { createSession, hashPassword } from "@/lib/server/auth";
 import { conflict, errorResponse } from "@/lib/server/errors";
+import { trialSubscriptionFields } from "@/lib/server/subscription";
 import { DEFAULT_ROLE_PERMISSIONS } from "@/lib/types";
 
 export async function POST(req: Request) {
@@ -23,6 +24,8 @@ export async function POST(req: Request) {
         name: body.organizationName,
         businessName: body.organizationName,
         rolePermissions: DEFAULT_ROLE_PERMISSIONS,
+        // تجربة SaaS14 يومًا على خطة الأعمال تبدأ مع المؤسسة
+        subscription: { create: trialSubscriptionFields() },
         users: {
           create: {
             name: body.name,

@@ -120,6 +120,8 @@ model Organization {
   payments           Payment[]
   notifications      Notification[]
   passwordResetTokens PasswordResetToken[]
+  /// اشتراك الخطة (SaaS) — سجل واحد لكل مؤسسة
+  subscription       Subscription?
 
   @@index([createdAt])
 }
@@ -525,4 +527,42 @@ model Notification {
 
   @@index([organizationId, read])
   @@index([organizationId, createdAt])
+}
+
+/* =================== اشتراكات SaaS (الخطط) =================== */
+
+enum plan {
+  free
+  basic
+  business
+  pro
+}
+
+enum subscriptionStatus {
+  trial
+  active
+  expired
+  cancelled
+}
+
+/// اشتراك مؤسسة بخطة واحدة — سجل واحد فريد لكل مؤسسة.
+/// بدون بوابة دفع في هذه المرحلة: التجربة تبدأ تلقائيًا،
+/// والخطط المدفوعة بعد انتهاء التجربة تُرفض لحين ربط Stripe.
+model Subscription {
+  id             String       @id @default(uuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  plan   plan               @default(business)
+  status subscriptionStatus @default(trial)
+
+  /// متى بدأت التجربة المجانية (مرة واحدة لكل مؤسسة)
+  trialUsedAt DateTime?
+  /// نهاية فترة التجربة
+  trialEndsAt  DateTime?
+  /// نهاية الدورة المدفوعة — تُملأ عند تفعيل بوابة دفع لاحقًا (Stripe)
+  currentPeriodEnd DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

@@ -7,6 +7,7 @@
 // ============================================================
 
 import type { BusinessSettings, CollectionName } from "@/lib/types";
+import type { PlanId, SubscriptionInfo } from "@/lib/plans";
 
 export interface DataProvider {
   list<T>(collection: CollectionName): Promise<T[]>;
@@ -16,6 +17,10 @@ export interface DataProvider {
   remove(collection: CollectionName, id: string): Promise<void>;
   getSettings(): Promise<BusinessSettings>;
   updateSettings(patch: Partial<BusinessSettings>): Promise<BusinessSettings>;
+  /** اشتراك المؤسسة: الخطة، الحالة، التجربة، الحدود، الاستخدام */
+  getSubscription(): Promise<SubscriptionInfo>;
+  /** تبديل الخطة (يدفع قواعد التجربة/الدفع — انظر plans.planSwitch) */
+  setPlan(plan: PlanId): Promise<SubscriptionInfo>;
   /** استيراد نسخة كاملة من البيانات (من ملف JSON) */
   importAll(data: Record<string, unknown>): Promise<void>;
   /** تصدير كل البيانات */

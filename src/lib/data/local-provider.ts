@@ -15,12 +15,25 @@ import {
   type StockMovement,
 } from "@/lib/types";
 import { uid } from "@/lib/utils";
+import {
+  PLAN_LIMITS,
+  TRIAL_DAYS,
+  TRIAL_PLAN,
+  addDays,
+  effectivePlan,
+  planSwitch,
+  type PlanId,
+  type SubscriptionInfo,
+  type SubscriptionRecord,
+  type SubscriptionStatus,
+} from "@/lib/plans";
 import { emitDataChanged, type DataProvider } from "./provider";
 import { buildSeed } from "./seed";
 
 const PREFIX = "akma:";
 const SETTINGS_KEY = `${PREFIX}settings`;
 const INIT_KEY = `${PREFIX}initialized`;
+const SUBSCRIPTION_KEY = `${PREFIX}subscription`;
 
 export const DEFAULT_SETTINGS: BusinessSettings = {
   businessName: "منشأتي",
@@ -178,6 +191,104 @@ class LocalStorageProvider implements DataProvider {
     writeJSON(SETTINGS_KEY, next);
     emitDataChanged();
     return next;
+  }
+
+  // ————— الاشتراك (SaaS) في الوضع المحلي —————
+  // نفس القواعد الخادمية: تجربة14 يومًا، حدود PLAN_LIMITS،
+  // بدون بوابة دفع (الدفع لاحقًا عبر Stripe في الوضع السحابي).
+
+  private subscriptionRecord(): SubscriptionRecord {
+    ensureInitialized();
+    const rec = readJSON<SubscriptionRecord | null>(SUBSCRIPTION_KEY, null);
+    if (rec && rec.plan) return rec;
+    // مؤسسة محلية جديدة → تجربة14 يومًا (مرة واحدة)
+    const fresh: SubscriptionRecord = {
+      plan: TRIAL_PLAN,
+      status: "trial",
+      trialUsedAt: new Date().toISOString(),
+      trialEndsAt: addDays(new Date(), TRIAL_DAYS).toISOString(),
+    };
+    writeJSON(SUBSCRIPTION_KEY, fresh);
+    return fresh;
+  }
+
+  private storageBytes(): number {
+    if (typeof window === "undefined") return 0;
+    try {
+      const enc = new TextEncoder();
+      let total = 0;
+      for (let i = 0; i < window.localStorage.length; i++) {
+        const k = window.localStorage.key(i);
+        if (!k || !k.startsWith(PREFIX)) continue;
+        const v = window.localStorage.getItem(k) ?? "";
+        total += enc.encode(k + v).length;
+      }
+      return total;
+    } catch {
+      return 0;
+    }
+  }
+
+  private async buildSubscriptionInfo(): Promise<SubscriptionInfo> {
+    const rec = this.subscriptionRecord();
+    const now = new Date();
+    let status = rec.status;
+    if (status === "trial" && rec.trialEndsAt && new Date(rec.trialEndsAt).getTime() <= now.getTime()) {
+      status = "expired" as SubscriptionStatus;
+      writeJSON(SUBSCRIPTION_KEY, { ...rec, status } satisfies SubscriptionRecord);
+    }
+    const plan = rec.plan;
+    const ePlan = effectivePlan(plan, status, rec.trialEndsAt, now.getTime());
+    const limits = PLAN_LIMITS[ePlan];
+    const usage = {
+      users: this.rows("users").length,
+      products: this.rows("products").length,
+      customers: this.rows("customers").length,
+      invoices: this.rows("invoices").length,
+      storageBytes: this.storageBytes(),
+    };
+    const daysLeft =
+      status === "trial" && rec.trialEndsAt
+        ? Math.max(0, Math.ceil((new Date(rec.trialEndsAt).getTime() - now.getTime()) / 86_400_000))
+        : null;
+    const mb = 1024 * 1024;
+    return {
+      plan,
+      status,
+      effectivePlan: ePlan,
+      trialUsed: rec.trialUsedAt != null,
+      trialUsedAt: rec.trialUsedAt ? new Date(rec.trialUsedAt).toISOString() : null,
+      trialEndsAt: rec.trialEndsAt ? new Date(rec.trialEndsAt).toISOString() : null,
+      daysLeft,
+      currentPeriodEnd: null,
+      limits,
+      usage,
+      remaining: {
+        users: limits.users === null ? null : limits.users - usage.users,
+        products: limits.products === null ? null : limits.products - usage.products,
+        customers: limits.customers === null ? null : limits.customers - usage.customers,
+        invoices: limits.invoices === null ? null : limits.invoices - usage.invoices,
+        storageMB:
+          limits.storageMB === null
+            ? null
+            : Math.round((limits.storageMB - usage.storageBytes / mb) * 10) / 10,
+      },
+    };
+  }
+
+  async getSubscription(): Promise<SubscriptionInfo> {
+    return this.buildSubscriptionInfo();
+  }
+
+  async setPlan(plan: PlanId): Promise<SubscriptionInfo> {
+    const rec = this.subscriptionRecord();
+    const result = planSwitch(rec, plan);
+    if (!result.ok) {
+      throw new Error("الخطط المدفوعة تحتاج تفعيل الدفع — بوابة الدفع ستُربط لاحقًا");
+    }
+    writeJSON(SUBSCRIPTION_KEY, { ...rec, ...result.next } satisfies SubscriptionRecord);
+    emitDataChanged();
+    return this.buildSubscriptionInfo();
   }
 
   async exportAll(): Promise<Record<string, unknown>> {

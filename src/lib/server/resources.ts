@@ -9,6 +9,7 @@
 import { prisma } from "./db";
 import { assertCan, type OrgContext } from "./auth";
 import { badRequest, conflict, forbidden, notFound } from "./errors";
+import { assertPlanLimit } from "./subscription";
 import * as v from "./validation";
 import type { z } from "zod";
 import type { Prisma } from "@/generated/prisma/client";
@@ -71,6 +72,7 @@ const customers = guarded("customers", {
     ),
   create: async (ctx, body) => {
     const data = v.customerSchema.parse(body);
+    await assertPlanLimit(ctx.organizationId, "customers");
     return prisma.customer.create({ data: { ...data, organizationId: ctx.organizationId } });
   },
   update: async (ctx, id, body) => {
@@ -219,6 +221,7 @@ const products = guarded("products", {
   get: (ctx, id) => productToDto(ctx, id),
   create: async (ctx, body) => {
     const data = v.productSchema.parse(body) as ProductInput;
+    await assertPlanLimit(ctx.organizationId, "products");
     const { category, stock, ...rest } = data;
     const categoryRow = await resolveCategory(ctx, category);
     // منتج + مخزون افتتاحي + حركة «رصيد افتتاحي» في معاملة واحدة
@@ -916,6 +919,7 @@ const invoices = guarded("invoices", {
     ),
   create: async (ctx, body) => {
     const data = v.invoiceSchema.parse(body);
+    await assertPlanLimit(ctx.organizationId, "invoices");
     await assertCustomerInOrg(ctx, data.customerId);
     await assertNumberFree(ctx, "invoice", data.number);
 
@@ -1107,6 +1111,7 @@ const users = guarded("users", {
     if (data.role === "owner" && ctx.role !== "owner") {
       throw forbidden("منح دور المالك للمدير فقط");
     }
+    await assertPlanLimit(ctx.organizationId, "users");
     // حساب جديد بلا كلمة مرور (يُفعّل لاحقًا) — لا نُنشئ جلسات هنا
     return prisma.user.create({
       data: { ...data, organizationId: ctx.organizationId },
