@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AKMA Automation</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a href="#/" class="brand"><span class="logo">⚡</span> AKMA <b>Automation</b></a>
+    <nav>
+      <a href="#/new" data-nav="new">＋ New client</a>
+      <a href="#/" data-nav="dashboard">Dashboard</a>
+    </nav>
+    <span class="provider" id="provider"></span>
+  </header>
+
+  <main id="app"></main>
+
+  <!-- ============ TEMPLATES ============ -->
+  <template id="tpl-form">
+    <section class="hero">
+      <h1>Client Form</h1>
+      <p>Fill in the brief — AKMA's automation workflow will run the AI analysis and generate a marketing plan and a content pack.</p>
+    </section>
+    <form id="client-form" class="card form" novalidate>
+      <fieldset>
+        <legend>1 · Business</legend>
+        <div class="grid2">
+          <label>Business name *<input name="businessName" required placeholder="e.g. Street Free Stock DZ" /></label>
+          <label>Industry
+            <select name="industry">
+              <option>Streetwear</option><option>Sneakers</option><option>Accessories</option>
+              <option>Vintage / Thrift</option><option>Cosmetics</option><option>Restaurant / Café</option><option>Other</option>
+            </select>
+          </label>
+          <label>Wilaya
+            <input name="wilaya" list="wilayas" placeholder="Alger" />
+          </label>
+          <label>Monthly marketing budget (DZD)<input name="budget" type="number" min="0" step="1000" placeholder="60000" /></label>
+        </div>
+        <label>Describe your products / offer<textarea name="description" rows="3" placeholder="Oversized tees, hoodies and cargo pants designed in Algiers, limited drops every month…"></textarea></label>
+        <label>Target audience<input name="targetAudience" placeholder="Young men & women 18-28 in big cities, into hip-hop & football culture" /></label>
+      </fieldset>
+
+      <fieldset>
+        <legend>2 · Goals & channels</legend>
+        <div class="chips" data-group="goals">
+          <label><input type="checkbox" name="goals" value="sales" checked /><span>Increase sales</span></label>
+          <label><input type="checkbox" name="goals" value="awareness" /><span>Brand awareness</span></label>
+          <label><input type="checkbox" name="goals" value="followers" /><span>Grow followers</span></label>
+          <label><input type="checkbox" name="goals" value="launch" /><span>Product launch</span></label>
+          <label><input type="checkbox" name="goals" value="leads" /><span>Generate leads</span></label>
+        </div>
+        <div class="chips" data-group="channels">
+          <label><input type="checkbox" name="channels" value="instagram" checked /><span>Instagram</span></label>
+          <label><input type="checkbox" name="channels" value="tiktok" checked /><span>TikTok</span></label>
+          <label><input type="checkbox" name="channels" value="facebook" /><span>Facebook</span></label>
+          <label><input type="checkbox" name="channels" value="ouedkniss" /><span>Ouedkniss</span></label>
+          <label><input type="checkbox" name="channels" value="whatsapp" /><span>WhatsApp</span></label>
+          <label><input type="checkbox" name="channels" value="website" /><span>Website</span></label>
+        </div>
+        <label>Brand tone
+          <select name="tone">
+            <option value="bold">Bold / street</option><option value="friendly">Friendly</option>
+            <option value="premium">Premium</option><option value="funny">Funny</option>
+          </select>
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>3 · Contact</legend>
+        <div class="grid3">
+          <label>Contact name *<input name="contactName" required /></label>
+          <label>Email *<input name="email" type="email" required /></label>
+          <label>Phone<input name="phone" type="tel" placeholder="05 / 06 / 07 …" /></label>
+        </div>
+      </fieldset>
+
+      <div class="actions">
+        <button type="button" class="ghost" id="fill-demo">Fill demo data</button>
+        <button type="submit" class="primary">Run automation ⚡</button>
+      </div>
+    </form>
+    <datalist id="wilayas"></datalist>
+  </template>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
