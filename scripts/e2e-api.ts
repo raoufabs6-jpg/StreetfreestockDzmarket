@@ -134,6 +134,19 @@ async function main() {
   ok(cust.status === 201, "عميل → 201", cust.json);
   const custA = cust.json.data;
 
+  // صفحة تفاصيل العميل (CRM)
+  const detailsPage = await fetch(`${BASE}/customers/${custA.id}`, {
+    headers: { cookie: A },
+    redirect: "manual",
+  });
+  ok(detailsPage.status === 200, "صفحة تفاصيل العميل → 200", detailsPage.status);
+  const detailsNoSession = await fetch(`${BASE}/customers/${custA.id}`, { redirect: "manual" });
+  ok(
+    detailsNoSession.status >= 300 && detailsNoSession.status < 400,
+    "تفاصيل العميل بدون جلسة → تحويل",
+    detailsNoSession.status,
+  );
+
   const prod = await call("POST", "/api/v1/products", A, {
     name: "منتج أ",
     sku: "A-1",

@@ -9,6 +9,7 @@
 import { useMemo } from "react";
 import { Badge, type BadgeTone } from "@/components/ui/primitives";
 import type { TableColumn } from "@/components/ui/data-table";
+import Link from "next/link";
 import { useI18n, type Lang, type MessageKey } from "@/lib/i18n";
 import { useCollection, useSettings, useCurrentUser } from "@/lib/hooks";
 import { CURRENCIES, ROLES, type CurrencyCode } from "@/lib/types";
@@ -79,6 +80,8 @@ export interface EntityConfig<T extends { id: string }> {
   filters?: FilterDef<T>[];
   dateRangeKey?: keyof T & string;
   sort?: (a: T, b: T) => number;
+  /** رابط صفحة التفاصيل — يضيف زر «التفاصيل» في صفوف الجدول */
+  rowLink?: (row: T) => string;
   rowName: (row: T) => string;
   validate?: (values: Record<string, unknown>) => string | null;
   /** حذف محظور (مثل حسابك الحالي) — يُرجع رسالة الخطأ */
@@ -166,6 +169,20 @@ const builders: { [K in EntityKey]: (ctx: BuildCtx) => EntityConfig<EntityMap[K]
     searchKeys: ["name", "email", "phone", "address"],
     searchPlaceholder: t("field.emailOrName"),
     rowName: (r) => r.name,
+    // صفحة التفاصيل (CRM): بطاقة العميل + إحصاءات + الخط الزمني
+    rowLink: (r) => `/customers/${r.id}`,
+    dateRangeKey: "createdAt",
+    filters: [
+      {
+        id: "email",
+        label: t("crm.filterByContact"),
+        options: [
+          { value: "yes", label: t("crm.hasEmail") },
+          { value: "no", label: t("crm.noEmail") },
+        ],
+        apply: (r, v) => (v === "yes" ? !!r.email : !r.email),
+      },
+    ],
     defaultValues: () => ({ name: "", email: "", phone: "", address: "", note: "" }),
     fields: [
       { key: "name", label: t("common.name"), kind: "text", required: true, span: 2, placeholder: t("field.searchByName") },
@@ -175,7 +192,18 @@ const builders: { [K in EntityKey]: (ctx: BuildCtx) => EntityConfig<EntityMap[K]
       { key: "note", label: t("common.note"), kind: "textarea", span: 2, placeholder: t("field.notePlaceholder") },
     ],
     columns: [
-      { key: "name", header: t("common.name"), render: (r) => <span className="font-semibold text-slate-800">{r.name}</span> },
+      {
+        key: "name",
+        header: t("common.name"),
+        render: (r) => (
+          <Link
+            href={`/customers/${r.id}`}
+            className="font-semibold text-slate-800 transition hover:text-primary-600"
+          >
+            {r.name}
+          </Link>
+        ),
+      },
       { key: "email", header: t("common.email"), render: (r) => r.email || "—", hideBelow: "lg" },
       { key: "phone", header: t("common.phone"), render: (r) => <span dir="ltr">{r.phone || "—"}</span> },
       { key: "address", header: t("common.address"), render: (r) => <span className="line-clamp-1">{r.address || "—"}</span>, hideBelow: "md" },

@@ -4,7 +4,8 @@
 // بحث + فلاتر + نطاق تاريخ + ترقيم + نموذج + حذف بتأكيد
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Pencil, Trash2, Users } from "lucide-react";
+import Link from "next/link";
+import { Eye, Pencil, Trash2, Users } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { useCollection, useCurrentUser } from "@/lib/hooks";
 import {
@@ -258,27 +259,41 @@ export function CrudPage<K extends EntityKey>({ entityKey, extra }: CrudPageProp
             : undefined
         }
         rowActions={
-          manage
+          config.rowLink || manage
             ? (row) => (
                 <>
-                  <button
-                    type="button"
-                    onClick={() => openEdit(row)}
-                    className="rounded-lg p-2 text-slate-400 transition hover:bg-primary-50 hover:text-primary-600"
-                    aria-label={t("common.edit")}
-                    title={t("common.edit")}
-                  >
-                    <Pencil className="size-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openDelete(row)}
-                    className="rounded-lg p-2 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
-                    aria-label={t("common.delete")}
-                    title={t("common.delete")}
-                  >
-                    <Trash2 className="size-4" />
-                  </button>
+                  {config.rowLink && (
+                    <Link
+                      href={config.rowLink(row)}
+                      className="rounded-lg p-2 text-slate-400 transition hover:bg-primary-50 hover:text-primary-600"
+                      aria-label={t("crm.viewDetails")}
+                      title={t("crm.viewDetails")}
+                    >
+                      <Eye className="size-4" />
+                    </Link>
+                  )}
+                  {manage && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => openEdit(row)}
+                        className="rounded-lg p-2 text-slate-400 transition hover:bg-primary-50 hover:text-primary-600"
+                        aria-label={t("common.edit")}
+                        title={t("common.edit")}
+                      >
+                        <Pencil className="size-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openDelete(row)}
+                        className="rounded-lg p-2 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
+                        aria-label={t("common.delete")}
+                        title={t("common.delete")}
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </>
+                  )}
                 </>
               )
             : undefined
