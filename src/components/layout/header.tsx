@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { cn, initials } from "@/lib/utils";
 import { useI18n, LANGS, type Lang } from "@/lib/i18n";
+import { isApiMode } from "@/lib/data";
 import { useCollection, useCurrentUser } from "@/lib/hooks";
 import type { Invoice, Product } from "@/lib/types";
 import { Badge } from "@/components/ui/primitives";
@@ -216,8 +217,7 @@ export function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
 
               <p className="border-t border-slate-100 px-4 pt-3 pb-1 text-[10px] font-bold tracking-wide text-slate-400 uppercase">
                 {t("common.language")}
-              </p>
-              <div className="flex gap-1 px-3 pb-3">
+              </p>              <div className="flex gap-1 px-3 pb-3">
                 <Globe className="my-auto size-4 text-slate-300" />
                 {LANGS.map((l) => (
                   <button
@@ -235,6 +235,23 @@ export function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
                   </button>
                 ))}
               </div>
+
+              {/* تسجيل الخروج — وضع قاعدة البيانات فقط */}
+              {isApiMode && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
+                    // تسجيل خروج: إعادة تحميل كاملة لتفريغ الحالة قبل فتح صفحة الدخول
+                    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+                    window.location.assign("/login");
+                  }}
+                  className="flex w-full items-center gap-2 border-t border-slate-100 px-4 py-3 text-xs font-bold text-rose-600 transition hover:bg-rose-50"
+                >
+                  <LogIn className="size-4 rotate-180" />
+                  {t("auth.signOut")}
+                </button>
+              )}
             </div>
           )}
         </div>

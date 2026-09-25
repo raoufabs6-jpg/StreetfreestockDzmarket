@@ -1,6 +1,6 @@
 # AKMA Business
 
-> **Simple Business Management** — منصة ويب بسيطة وسهلة الاستخدام للتجار وأصحاب المؤسسات الصغيرة والمتوسطة، تجمع في نظام واحد بين الوظائف الأساسية لـ **ERP** و **CRM**.
+> **Simple Business Management** — منصة ويب بسيطة وسهلة الاستخدام للتجار وأصحاب المؤسسات الصغيرة والمتوسطة، تجمع في نظام واحد بين الوظائف الأساسية لـ **ERP** و **CRM** — مع طبقة **SaaS متعددة المؤسسات** (Multi-tenant) على **PostgreSQL**.
 
 واجهة عربية بالكامل مع دعم **RTL**، وجاهزة لدعم الفرنسية والإنجليزية لاحقًا.
 
@@ -21,19 +21,20 @@
 | 9 | **المصاريف** | تصنيف المصروف، طريقة الدفع، نطاق تاريخ |
 | 10 | **التقارير** | ملخص الفترة (مبيعات/مشتريات/مصاريف/ربح)، مبيعات شهرية، أفضل المنتجات |
 | 11 | **المستخدمون والصلاحيات** | حسابات بالأدوار (مدير النظام/مدير/موظف) + مصفوفة صلاحيات قابلة للتعديل |
-| 12 | **الإعدادات** | بيانات المنشأة، اللغة، العملة، تصدير/استيراد البيانات، حذف أو استعادة البيانات التجريبية |
+| 12 | **الإعدادات** | بيانات المنشأة، اللغة، العملة، تصدير/استيراد البيانات |
 
-**واجهة المستخدم:** Sidebar قابل للطي على الكمبيوتر + Bottom Navigation ودرج جانبي على الهاتف، Header فيه البحث السريع والإشعارات (مخزّنة من بياناتك الحقيقية) وحساب المستخدم، جداول احترافية مع بحث وفلاتر وترقيم، نماذج واضحة مع تحقق، حوارو تأكيد للحذف، وToast notifications لكل عملية.
+**واجهة المستخدم:** Sidebar قابل للطي على الكمبيوتر + Bottom Navigation ودرج جانبي على الهاتف، Header فيه البحث السريع والإشعارات وحساب المستخدم (وشريط تسجيل الخروج في وضع قاعدة البيانات)، جداول احترافية مع بحث وفلاتر وترقيم، نماذج مع تحقق، حوارو تأكيد، Toast notifications.
 
 ---
 
 ## 🛠 التقنيات
 
-- **Next.js 16** (App Router) + **React 19**
-- **TypeScript** (نوعين صارمين لكل الكيانات)
-- **Tailwind CSS 4** (تصميم Responsive مع دعم RTL عبر الخصائص المنطقية)
-- مكونات UI مكتوبة داخل المشروع (جداول، نماذج، نوافذ، تنبيهات) — بدون تبعيات ثقيلة
-- خط **Tajawal** مضمّن داخل المشروع (self-hosted) — لا يحتاج اتصالًا بـ Google Fonts
+- **Next.js 16** (App Router) + **React 19** + **TypeScript**
+- **Tailwind CSS 4** (Responsive مع دعم RTL عبر الخصائص المنطقية)
+- **PostgreSQL + Prisma 7 ORM** (يدعم Vercel/Neon/Supabase)
+- **Zod** للتحقق من مدخلات API على الخادم
+- مصادقة جلسات بكوكي موقّع (HMAC) + كلمات مرور مُجزّأة بـ scrypt — **لا أسرار داخل الكود**
+- خط **Tajawal** مضمّن داخل المشروع (self-hosted)
 
 ---
 
@@ -42,115 +43,136 @@
 **المتطلبات:** Node.js 18.18+ (يُفضّل 20 أو 22)
 
 ```bash
-# 1) استنساخ المستودع
 git clone <رابط-مستودعك>.git
 cd <اسم-المجلد>
-
-# 2) تثبيت الاعتماديات
-npm install
-
-# 3) تشغيل بيئة التطوير
-npm run dev
-# افتح http://localhost:3000
-
-# 4) بناء نسخة الإنتاج (اختياري)
-npm run build
-npm run start
-
-# فحص الجودة
-npm run lint
-npx tsc --noEmit
+npm install        # يُولّد Prisma client تلقائيًا (postinstall)
 ```
 
-> عند أول تشغيل تُنشأ **بيانات تجريبية** في متصفحك لتستعرض بها الوحدات. كلها قابلة للتعديل والحذف، ويمكن حذفها بالكامل من **الإعدادات → مسح جميع البيانات** أو استبدالها ببياناتك الحقيقية.
+### الوضعان لطبقة البيانات
 
----
+| الوضع | الوسط | متطلبات |
+|-------|-------|---------|
+| **`local`** (افتراضي) | تخزين المتصفح (localStorage) | لا شيء — يعمل فورًا مع بيانات تجريبية |
+| **`api`** | PostgreSQL + عزل المؤسسات + تسجيل دخول | `DATABASE_URL` + `AUTH_SECRET` |
 
-## 📦 بنية المشروع
+### الوضع المحلي (بدون قاعدة بيانات)
 
+```bash
+npm run dev        # افتح http://localhost:3000
 ```
-src/
-├── app/                      # صفحات Next.js (App Router)
-│   ├── layout.tsx            # الـ Layout الجذري (الاتجاه RTL، اللغة)
-│   ├── page.tsx              # توجيه إلى /dashboard
-│   └── (app)/                # الصفحات داخل الهيكل العام
-│       ├── dashboard/        # لوحة التحكم
-│       ├── customers/        # العملاء
-│       ├── products/         # المنتجات
-│       ├── inventory/        # المخزون
-│       ├── sales/            # المبيعات
-│       ├── suppliers/        # الموردون
-│       ├── purchases/        # المشتريات
-│       ├── invoices/         # الفواتير
-│       ├── expenses/         # المصاريف
-│       ├── reports/          # التقارير
-│       ├── users/            # المستخدمون والصلاحيات
-│       ├── settings/         # الإعدادات
-│       └── search/           # البحث الشامل
-├── components/
-│   ├── layout/               # Sidebar + Header + BottomNav (App Shell)
-│   ├── ui/                   # Button, Input, Modal, Toast, DataTable...
-│   └── crud/                 # صفحة CRUD الموحدة + النموذج + محرر البنود
-└── lib/
-    ├── types.ts              # أنماط البيانات (Domain Types)
-    ├── hooks.ts              # useCollection / useSettings / useCurrentUser
-    ├── utils.ts              # تنسيق المبالغ والتواريخ والأكواد
-    ├── i18n/                 # ar / en / fr + مزوّد الترجمة (RTL/LTR)
-    ├── entities/registry.tsx # تعريف حقول وأعمدة كل وحدة
-    └── data/                 # ★ طبقة البيانات (معزولة عن الواجهة)
-        ├── provider.ts       # واجهة DataProvider (العقد)
-        ├── local-provider.ts # تنفيذ localStorage (حاليًا)
-        ├── seed.ts           # بيانات البداية القابلة للاستبدال
-        └── index.ts          # نقطة التبديل إلى قاعدة بيانات حقيقية
+
+### الوضع المتصل بقاعدة البيانات (SaaS)
+
+```bash
+# 1) أنشئ ملف .env من المثال واملأه (انظر .env.example)
+cp .env.example .env
+
+# 2) طبّق الهجرات على قاعدة البيانات
+npm run db:deploy          # أو: npm run db:migrate (تطوير)
+
+# 3) شغّل التطبيق
+NEXT_PUBLIC_DATA_PROVIDER=api npm run dev
+
+# 4) أول زيارة: أنشئ مؤسستك وحساب مدير النظام من صفحة /setup
+#    ثم سجّل الدخول من /login
+```
+
+> أول من يفتح `/setup` في كل نشر يُنشئ «مؤسسة» ومدير النظام — بعدها تُغلق التهيئة تلقائيًا (409).
+
+### أوامر مفيدة
+
+```bash
+npm run lint          # فحص ESLint
+npx tsc --noEmit      # فحص الأنواع
+npm run build         # بناء الإنتاج
+npm run db:validate   # التحقق من مخطط Prisma
+npm run db:studio     # متصفح قاعدة البيانات
+npm run db:smoke      # فحص صحة العلاقات/القيود/العزل (يُنشئ مؤسسة اختبار ويحذفها)
+npm run test:api      # اختبار تكامل API الشامل (يتطلب خادمًا يعملًا + DATABASE_URL يحتوي "test")
 ```
 
 ---
 
-## 🗄 طبقة البيانات والربط بقاعدة بيانات حقيقية
+## 🗄 قاعدة البيانات (Multi-tenant)
 
-الواجهة **لا تعرف** كيف تُخزَّن البيانات — كل الوصول يتم عبر الواجهة المجرّدة `DataProvider` في `src/lib/data/provider.ts`:
+### الجداول والعلاقات
 
-```ts
-interface DataProvider {
-  list<T>(collection): Promise<T[]>;
-  create<T>(collection, value): Promise<T>;
-  update<T>(collection, id, patch): Promise<T>;
-  remove(collection, id): Promise<void>;
-  getSettings(): Promise<BusinessSettings>;
-  // ... تصدير/استيراد/مسح
-}
+```
+Organization (المؤسسة — وحدة العزل)
+├── User                (المستخدمون + الدور + passwordHash)
+├── Customer            (العملاء)          ← Sale, Invoice
+├── Supplier            (الموردون)         ← Purchase
+├── Category            (الفئات)           ← Product
+├── Product             (المنتجات)         ← Inventory, InventoryMovement, SaleItem, PurchaseItem
+├── Inventory           (مستوى المخزون الحالي لكل منتج — سجل واحد فريد)
+├── InventoryMovement   (سجل حركات المخزون — يغذّي صفحة المخزون)
+├── Sale ── SaleItem ── Product
+├── Purchase ── PurchaseItem ── Product
+├── Invoice             (فواتير التحصيل)   ← Payment
+├── Expense             (المصاريف)
+├── Payment             (المدفوعات)
+└── Notification        (الإشعارات)
 ```
 
-**الحالي:** `local-provider.ts` يخزّن في `localStorage` (مناسب لـ MVP بلا خادم، والبيانات تبقى بعد إغلاق المتصفح وتصدر كملف JSON).
+كل جدول بيانات يحمل:
 
-**الخطوات لربط قاعدة بيانات حقيقية (PostgreSQL / Supabase ...):**
+- `organizationId` — مفتاح خارجي إلى `Organization` **+ فهرس**، وكل استعلام يُفلتر به
+- `createdAt` / `updatedAt` — تلقائيان من Prisma
+- قيود تفرّد وعلاقات مرجعية (RESTRICT/CASCADE/SET NULL) حسب منطق العمل
 
-1. أنشئ `src/lib/data/api-provider.ts` ينفّذ نفس الواجهة `DataProvider` فوق استدعاءات REST أو Prisma.
-2. في `src/lib/index.ts` (أي `src/lib/data/index.ts`) بدّل السطر الوحيد:
+### عزل المؤسسات — كيف يعمل؟
 
-```ts
-export const getProvider = (): DataProvider => apiProvider; // بدل localProvider
+1. تسجيل الدخول يُصدر **كوكي جلسة** موقّعًا يحمل `userId` + `organizationId`.
+2. كل مسار API يستدعي `requireOrgContext()` — يبني السياق من **الجلسة فقط** (لا من جسم الطلب).
+3. `organizationId` **لا يُقبل أبدًا** من العميل — يُشتق من الجلسة عند الكتابة.
+4. القراءة/التحديث/الحذف تستخدم `WHERE id = ? AND organizationId = ?` — سجل مؤسسة أخرى يعيد **404** (لا يكشف وجوده).
+5. العلاقات المُرسلة (عميل/مورد/منتج في مستند) **تُتحقق** ضمن نفس المؤسسة قبل الإنشاء.
+6. الصلاحيات تُفرض **على الخادم** أيضًا (نفس مصفوفة الواجهة) — تزوير الطرف الأمامي لا يفيد.
+
+> مثال: مؤسسة A تحاول قراءة/تعديل/حذف عميل مؤسسة B → `404`، وبيع بمنتج مؤسسة B → `400`.
+
+### التحقق والأخطاء
+
+- **Zod schemas** لكل مورد (`src/lib/server/validation.ts`) — رسائل عربية + تفاصيل حقول في رد `400`.
+- أكواد أخطاء ثابتة: `VALIDATION_ERROR / UNAUTHORIZED / FORBIDDEN / NOT_FOUND / CONFLICT / INTERNAL_ERROR`.
+- أخطاء Prisma تُترجم (تكرار فريد → `409`، مرجع مفقود → `409`، سجل مفقود → `404`).
+- الردود: `{ data }` عند النجاح، `{ error: { code, message, details? } }` عند الفشل — **لا تفاصيل داخلية أو هاشات كلمات مرور تُرسل للعميل أبدًا**.
+
+### الـ API
+
 ```
+POST   /api/auth/setup        إنشاء أول مؤسسة (مرة واحدة لكل نشر)
+POST   /api/auth/login        تسجيل الدخول → كوكي جلسة
+POST   /api/auth/logout       تسجيل الخروج
+GET    /api/auth/me           الجلسة الحالية
+GET/PUT /api/settings         إعدادات المنشأة (من مؤسسة الجلسة فقط)
 
-3. أضف متغيرات البيئة في Vercel (مثال: `DATABASE_URL`) — انظر `.env.example`.
+GET    /api/v1/{resource}                 قائمة (محصورة بالمؤسسة)
+POST   /api/v1/{resource}                 إنشاء
+GET    /api/v1/{resource}/{id}            قراءة
+PATCH  /api/v1/{resource}/{id}            تحديث جزئي
+DELETE /api/v1/{resource}/{id}            حذف
 
-لن تحتاج لتعديل أي صفحة أو مكوّن واجهة.
+# الموارد: customers, suppliers, categories, products, movements,
+#          sales, purchases, invoices, expenses, users, payments, notifications
+```
 
 ---
 
 ## 🌍 اللغة و RTL
 
-- الواجهة عربية **RTL** افتراضيًا، ويقلب التطبيق تلقائيًا إلى LTR عند اختيار الإنجليزية/الفرنسية.
+- الواجهة عربية **RTL** افتراضيًا، ويقلب تلقائيًا إلى LTR عند اختيار الإنجليزية/الفرنسية.
 - القواميس في `src/lib/i18n/{ar,en,fr}.ts`.
-- **لإضافة لغة جديدة:** أنشئ ملف `xx.ts` بنفس مفاتيح `ar.ts`، أضفه في `dictionaries` داخل `src/lib/i18n/index.tsx`، وأضف سطرًا في `LANGS`.
+- **لإضافة لغة جديدة:** أنشئ `xx.ts` بنفس مفاتيح `ar.ts`، أضفه في `dictionaries` داخل `src/lib/i18n/index.tsx`، وأضف سطرًا في `LANGS`.
 
 ---
 
 ## 🔐 الصلاحيات
 
-ثلاثة أدوار افتراضية: `مدير النظام` (كل الصلاحيات)، `مدير`، `موظف`. مصفوفة الصلاحيات (عرض/إدارة لكل وحدة) تُعدَّل من **المستخدمون والصلاحيات** وتُطبَّق فورًا على القائمة الجانبية وأزرار الإضافة/التعديل/الحذف.
+ثلاثة أدوار: `مدير النظام` (كل الصلاحيات دائمًا)، `مدير`، `موظف`. مصفوفة العرض/الإدارة لكل وحدة تُعدَّل من **المستخدمون والصلاحيات** وتُطبَّق فورًا على الواجهة **وعلى الخادم معًا**.
 
-> هذه حماية على مستوى الواجهة (MVP). عند الإنتاج الكامل تُضاف المصادقة (Login) والتحقق على مستوى الخادم/API.
+- حسابات تُنشأ من واجهة المستخدمين **بلا كلمة مرور** (لا تستطيع الدخول حتى يُضبط لها كلمة مرور).
+- كلمة مرور المدير تُنشأ من صفحة `/setup` فقط، وتُخزَّن `scrypt+salt` — لا تظهر في أي رد أو سجل.
 
 ---
 
@@ -158,19 +180,22 @@ export const getProvider = (): DataProvider => apiProvider; // بدل localProvi
 
 ### الطريقة 1 — من GitHub (مُوصى بها)
 
-1. ارفع المستودع إلى GitHub:
-   ```bash
-   git remote add origin <رابط-مستودعك>
-   git push -u origin main
-   ```
-2. افتح [vercel.com](https://vercel.com) ← **Add New... → Project** ← اختر المستودع.
-3. Vercel يكتشف Next.js تلقائيًا — لا يحتاج إعدادات خاصة:
-   - Framework: **Next.js**
-   - Build Command: `npm run build` (افتراضي)
-4. اضغط **Deploy** — ينتهي خلال دقيقة ويمنحك رابطًا مثل `akma-business.vercel.app`.
-5. أي تعديل لاحق على `main` يُنشر تلقائيًا (Deploy on Push).
+1. ارفع المستودع إلى GitHub ثم من [vercel.com](https://vercel.com): **Add New... → Project** — يكتشف Next.js تلقائيًا.
+2. أضف متغيرات البيئة من **Settings → Environment Variables**:
 
-### الطريقة 2 — من سطر الأوامر
+   | المتغير | القيمة |
+   |---------|--------|
+   | `DATABASE_URL` | رابط PostgreSQL (Neon / Supabase / Vercel Postgres) |
+   | `AUTH_SECRET` | `openssl rand -base64 32` (قيمة عشوائية جديدة) |
+   | `NEXT_PUBLIC_DATA_PROVIDER` | `api` |
+
+3. اضغط **Deploy** — خطوة التركيب تُولّد Prisma client تلقائيًا (`postinstall`)، ويمكن تشغيل الهجرات من جهازك:
+   ```bash
+   DATABASE_URL="رابط-الإنتاج" npm run db:deploy
+   ```
+4. افتح الموقع وأنشئ مؤسستك من `/setup` أول مرة.
+
+### الطريقة 2 — سطر الأوامر
 
 ```bash
 npm i -g vercel
@@ -178,20 +203,61 @@ vercel          # بيئة المعاينة
 vercel --prod   # بيئة الإنتاج
 ```
 
-**ملاحظات:**
-- لا حاجة لعدد متغيرات بيئة حاليًا (التخزين في المتصفح).
-- عند ربط قاعدة بيانات لاحقًا أضف متغيراتها من: **Project → Settings → Environment Variables**.
+> في وضع `local` (بدون `NEXT_PUBLIC_DATA_PROVIDER`) لا حاجة لأي متغيرات — يُنشر كموقع يعمل فورًا.
+
+---
+
+## 📦 بنية المشروع
+
+```
+prisma/
+├── schema.prisma              # مخطط قاعدة البيانات (16 جدولًا)
+├── migrations/                # SQL الهجرات (migrate deploy)
+scripts/
+├── db-smoke.ts                # فحص صحة القاعدة والعلاقات والعزل
+└── e2e-api.ts                 # اختبار تكامل API الشامل (42 اختبارًا)
+src/
+├── app/
+│   ├── (app)/                 # الصفحات داخل الهيكل العام (12 وحدة)
+│   ├── login/ setup/          # الدخول وإنشاء المؤسسة (وضع api فقط)
+│   └── api/
+│       ├── auth/              # login · logout · me · setup
+│       ├── settings/          # إعدادات المنشأة
+│       └── v1/[resource]/     # CRUD عام لكل الموارد
+├── components/
+│   ├── layout/                # Sidebar + Header + BottomNav
+│   ├── ui/                    # Button, Input, Modal, Toast, DataTable...
+│   └── crud/                  # صفحة CRUD الموحدة + النموذج
+├── generated/prisma/          # عميل Prisma المُولَّد (gitignored)
+└── lib/
+    ├── types.ts               # أنماط البيانات المشتركة
+    ├── hooks.ts               # useCollection / useSettings / useCurrentUser
+    ├── i18n/                  # ar / en / fr + RTL/LTR
+    ├── entities/registry.tsx  # حقول وأعمدة كل وحدة
+    ├── data/                  # DataProvider: local | api (مبدّل واحد)
+    └── server/                # خادم فقط: db · auth · validation · resources · errors
+```
+
+### فصل الواجهة عن البيانات
+
+الواجهة لا تعرف شيئًا عن التخزين — كل الوصول عبر `DataProvider`:
+
+- `local-provider.ts` → localStorage (وضع MVP بلا خادم)
+- `api-provider.ts` → `/api/v1/*` → **PostgreSQL**
+
+التبديل بينهما بمتغيّر بيئة واحد `NEXT_PUBLIC_DATA_PROVIDER` — دون تغيير أي صفحة.
 
 ---
 
 ## 🗺 خارطة الطريق (بعد الـ MVP)
 
-- [ ] مصادقة كاملة (تسجيل دخول + خادم للتحقق)
+- [ ] تسجيل دخول بكل رمز تحقق (Magic Link / OAuth)
 - [ ] ربط المخزون تلقائيًا بعمليات البيع/الشراء
-- [ ] قاعدة بيانات حقيقية (PostgreSQL/Supabase) عبر `DataProvider`
+- [ ] صفحة إدارة المدفوعات والربط بلفواتير من الواجهة
 - [ ] طباعة الفواتير PDF
-- [ ] ترجمة كاملة للفرنسية والإنجليزية من لوحة الإدارة
-- [ ] صلاحيات مخصصة لكل مستخدم فرديًا
+- [ ] ترجمة كاملة للفرنسية والإنجليزية
+- [ ] صلاحيات مخصصة لكل مستخدم فرديًا + Row Level Security على مستوى القاعدة
+- [ ] الترقية إلى Decimal للمبالغ إن احتاجت المحاسبة الدقيقة
 
 **ليس ضمن هذا الـ MVP عمدًا:** الدفع الإلكتروني، الذكاء الاصطناعي، والمحاسبة القانونية.
 

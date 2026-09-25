@@ -1,15 +1,22 @@
 // ============================================================
 // نقطة الوصول لطبقة البيانات (Factory)
 // ——————————————————————————————————————————————
-// الحالية: التخزين المحلي في المتصفح (مناسب لـ MVP بلا خادم).
-// لاحقًا: أنشئ `api-provider.ts` ينفّذ DataProvider فوق
-// REST/Prisma/Supabase وغيّر السطر التالي فقط:
-//   export const getProvider = (): DataProvider => apiProvider;
+// الوضعان:
+//  1) "local" (افتراضي): التخزين في متصفح المستخدم — MVP بلا خادم.
+//  2) "api": PostgreSQL عبر Prisma + عزل multi-tenant —
+//     يُفعَّل بمتغير البيئة NEXT_PUBLIC_DATA_PROVIDER=api
+//     (مع DATABASE_URL + AUTH_SECRET).
+// لاحقًا: أضف مزوّدًا جديدًا هنا دون تغيير أي مكوّن واجهة.
 // ============================================================
 
 import type { DataProvider } from "./provider";
 import { localProvider } from "./local-provider";
+import { apiProvider } from "./api-provider";
 
 export { emitDataChanged, onDataChanged, type DataProvider } from "./provider";
 
-export const getProvider = (): DataProvider => localProvider;
+/** هل التطبيق يعمل بقاعدة بيانات حقيقية؟ */
+export const isApiMode = process.env.NEXT_PUBLIC_DATA_PROVIDER === "api";
+
+export const getProvider = (): DataProvider =>
+  isApiMode ? apiProvider : localProvider;

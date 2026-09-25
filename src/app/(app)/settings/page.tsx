@@ -78,7 +78,13 @@ export default function SettingsPage() {
         await getProvider().clearAll();
         toast.success(t("toast.cleared"));
       } else if (confirmKind === "seed") {
-        await getProvider().reseed?.();
+        const provider = getProvider();
+        if (!provider.reseed) {
+          toast.error(t("settings.reseedUnsupported"));
+          setConfirmKind(null);
+          return;
+        }
+        await provider.reseed();
         toast.success(t("toast.reseeded"));
       }
     } catch {

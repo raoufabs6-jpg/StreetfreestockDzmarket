@@ -330,6 +330,22 @@ export const ar = {
   "error.load": "تعذّر تحميل البيانات",
   "error.goHome": "العودة للوحة التحكم",
   "error.forbidden": "ليس لديك صلاحية للوصول إلى هذه الصفحة",
+  "auth.signIn": "تسجيل الدخول",
+  "auth.signOut": "تسجيل الخروج",
+  "auth.password": "كلمة المرور",
+  "auth.orgName": "اسم المؤسسة",
+  "auth.adminName": "اسم المسؤول",
+  "auth.confirmPassword": "تأكيد كلمة المرور",
+  "auth.passwordMismatch": "كلمتا المرور غير متطابقتين",
+  "auth.wrongCredentials": "البريد الإلكتروني أو كلمة المرور غير صحيحة",
+  "auth.createCta": "إنشاء مؤسسة جديدة",
+  "auth.setupTitle": "إنشاء أول مؤسسة",
+  "auth.setupSubtitle": "ابدأ بإنشاء مؤسستك وحساب مدير النظام",
+  "auth.alreadySetup": "تم إنشاء مؤسسة بالفعل في هذا النشر — سجّل الدخول",
+  "auth.backToLogin": "العودة لتسجيل الدخول",
+  "auth.haveAccount": "لديك حساب بالفعل؟",
+  "settings.reseedUnsupported": "البيانات التجريبية متاحة فقط في وضع التخزين المحلي",
+  "auth.passwordMin": "8 أحرف على الأقل",
 } as const;
 
 export type MessageKey = keyof typeof ar;
