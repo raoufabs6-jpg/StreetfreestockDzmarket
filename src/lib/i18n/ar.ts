@@ -255,6 +255,17 @@ export const ar = {
   "dashboard.newCustomer": "عميل جديد",
   "dashboard.newProduct": "منتج جديد",
   "dashboard.newExpense": "مصروف جديد",
+  "dashboard.todaySales": "مبيعات اليوم",
+  "dashboard.orders": "عدد الطلبات",
+  "dashboard.chartDays": "المبيعات حسب الأيام",
+  "dashboard.chartMonths": "المبيعات حسب الأشهر",
+  "dashboard.chartTopProducts": "المنتجات الأكثر مبيعًا",
+  "dashboard.chartCategory": "المبيعات حسب التصنيف",
+  "dashboard.last7days": "آخر 7 أيام",
+  "dashboard.last6months": "آخر 6 أشهر",
+  "dashboard.recentCustomers": "العملاء الجدد",
+  "dashboard.uncategorized": "غير مصنف",
+  "dashboard.other": "أخرى",
 
   // المخزون
   "inventory.stockStatus": "حالة المخزون",

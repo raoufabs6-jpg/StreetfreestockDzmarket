@@ -792,6 +792,13 @@ async function main() {
   const saleStillThere = await call("GET", `/api/v1/sales/${saleForInvoiceId}`, E);
   ok(saleStillThere.status === 200, "البيع المصدري سليم بعد حذف الفاتورة", saleStillThere.status);
 
+  // لوحة التحكم (مركز التحكم) تُعرض بالجلسة
+  const dashPage = await fetch(`${BASE}/dashboard`, {
+    headers: { cookie: E },
+    redirect: "manual",
+  });
+  ok(dashPage.status === 200, "صفحة لوحة التحكم → 200", dashPage.status);
+
   await pg.end();
 
   console.log(`\n════════ النتيجة: ${passed} نجح / ${failed} فشل ════════`);

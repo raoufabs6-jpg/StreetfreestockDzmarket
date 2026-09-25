@@ -1,6 +1,7 @@
 "use client";
 
-// لوحة التحكم — مؤشرات العمل في الوقت الفعلي من بياناتك
+// لوحة التحكم — مركز التحكم الرئيسي: مؤشرات لحظية + رسوم بيانية
+// جميع الأرقام محسوبة فعليًا من بيانات Provider (تأتي من قاعدة البيانات في وضع API)
 
 import type { ReactNode } from "react";
 import Link from "next/link";
@@ -16,12 +17,14 @@ import {
   PackageX,
   ShoppingCart,
   UserPlus,
+  CalendarDays,
 } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { useCollection, useCurrentUser, useSettings } from "@/lib/hooks";
-import { cn, docTotal, formatMoney, formatDate, todayISO } from "@/lib/utils";
+import { cn, docTotal, formatMoney, formatDate, todayISO, daysAgoISO } from "@/lib/utils";
 import type { Customer, Expense, Invoice, Product, Sale } from "@/lib/types";
 import { Badge, Button, Card, CardTitle, EmptyState, PageHeader, Spinner } from "@/components/ui/primitives";
+import { BarSeriesChart, RankBarsChart, DonutChart, type ChartDatum } from "@/components/dashboard/charts";
 
 /* ------------------------------ بطاقة إحصائية ------------------------------ */
 
@@ -54,7 +57,7 @@ function StatCard({
           <p className="mt-1.5 truncate text-lg font-extrabold text-slate-900" dir="auto">
             {value}
           </p>
-          {hint && <p className="mt-1 text-[11px] text-slate-400">{hint}</p>}
+          {hint && <p className="mt-1 truncate text-[11px] text-slate-400">{hint}</p>}
         </div>
         <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-xl", tones[tone])}>
           {icon}
@@ -81,7 +84,11 @@ export default function DashboardPage() {
   const money = (v: number) => formatMoney(v, currency, lang);
 
   const loading = loadingSales;
-  const salesTotal = sales.reduce((s, r) => s + docTotal(r.items, r.discount), 0);
+
+  /* ----------------- الحسابات الفعلية من البيانات ----------------- */
+  const saleSum = (rows: Sale[]) => rows.reduce((s, r) => s + docTotal(r.items, r.discount), 0);
+
+  const salesTotal = saleSum(sales);
   const expensesTotal = expenses.reduce((s, r) => s + (r.amount || 0), 0);
   const productMap = new Map(products.map((p) => [p.id, p]));
   const cogs = sales.reduce(
@@ -95,13 +102,76 @@ export default function DashboardPage() {
   );
   const netProfit = salesTotal - cogs - expensesTotal;
   const stockValue = products.reduce((s, p) => s + p.stock * p.costPrice, 0);
+
+  const today = todayISO();
+  const monthPrefix = today.slice(0, 7);
+  const todaySales = saleSum(sales.filter((r) => r.date === today));
+  const monthSales = saleSum(sales.filter((r) => r.date.startsWith(monthPrefix)));
+  const ordersCount = sales.length;
+
   const lowStock = products.filter((p) => p.stock <= p.minStock).sort((a, b) => a.stock - b.stock);
-  const monthPrefix = todayISO().slice(0, 7);
-  const monthSales = sales
-    .filter((r) => r.date.startsWith(monthPrefix))
-    .reduce((s, r) => s + docTotal(r.items, r.discount), 0);
   const unpaidInvoices = invoices.filter((i) => i.status === "sent" || i.status === "draft");
   const recentSales = [...sales].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6);
+  const recentCustomers = [...customers]
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 5);
+
+  /* --------------------------- سلاسل الرسوم --------------------------- */
+  // المبيعات حسب الأيام — آخر 7 أيام (الأيام بلا مبيعات تظهر صفرًا)
+  const daySeries: ChartDatum[] = Array.from({ length: 7 }, (_, i) => {
+    const d = daysAgoISO(6 - i);
+    const value = saleSum(sales.filter((r) => r.date === d));
+    return {
+      label: formatDate(d, lang, { weekday: "short" }),
+      value,
+      hint: `${formatDate(d, lang)} — ${money(value)}`,
+    };
+  });
+
+  // المبيعات حسب الأشهر — آخر6 أشهر
+  const now = new Date();
+  const monthSeries: ChartDatum[] = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+    const prefix = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const value = saleSum(sales.filter((r) => r.date.startsWith(prefix)));
+    const first = `${prefix}-01`;
+    return {
+      label: formatDate(first, lang, { month: "short" }),
+      value,
+      hint: `${formatDate(first, lang, { month: "long", year: "numeric" })} — ${money(value)}`,
+    };
+  });
+
+  // المنتجات الأكثر مبيعًا (بالإيراد) + المبيعات حسب التصنيف
+  const byProduct = new Map<string, { qty: number; revenue: number }>();
+  for (const s of sales) {
+    for (const it of s.items) {
+      const cur = byProduct.get(it.productId) ?? { qty: 0, revenue: 0 };
+      cur.qty += it.quantity;
+      cur.revenue += it.quantity * it.price;
+      byProduct.set(it.productId, cur);
+    }
+  }
+  const topProducts: ChartDatum[] = [...byProduct.entries()]
+    .map(([id, v]) => ({
+      label: productMap.get(id)?.name ?? "—",
+      value: v.revenue,
+      hint: `${t("common.quantity")}: ${v.qty} — ${money(v.revenue)}`,
+    }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 5);
+
+  const byCategory = new Map<string, number>();
+  for (const s of sales) {
+    for (const it of s.items) {
+      const cat =
+        productMap.get(it.productId)?.category?.trim() || t("dashboard.uncategorized");
+      byCategory.set(cat, (byCategory.get(cat) ?? 0) + it.quantity * it.price);
+    }
+  }
+  const categorySeries: ChartDatum[] = [...byCategory.entries()]
+    .map(([label, value]) => ({ label, value, hint: `${label}: ${money(value)}` }))
+    .sort((a, b) => b.value - a.value);
 
   if (!can("dashboard.view")) {
     return (
@@ -134,31 +204,19 @@ export default function DashboardPage() {
         </div>
       ) : (
         <>
-          {/* الإحصائيات */}
-          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-6">
+          {/* الإحصائيات — مؤشرات المركز */}
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
             <StatCard
-              label={t("dashboard.totalSales")}
-              value={money(salesTotal)}
+              label={t("dashboard.todaySales")}
+              value={money(todaySales)}
               icon={<TrendingUp className="size-5" />}
-              hint={`${t("dashboard.monthSales")}: ${money(monthSales)}`}
             />
             <StatCard
-              label={t("dashboard.customers")}
-              value={String(customers.length)}
-              icon={<Users className="size-5" />}
-              tone="sky"
-            />
-            <StatCard
-              label={t("dashboard.products")}
-              value={String(products.length)}
-              icon={<Package className="size-5" />}
-              tone="violet"
-            />
-            <StatCard
-              label={t("dashboard.stockValue")}
-              value={money(stockValue)}
-              icon={<Boxes className="size-5" />}
+              label={t("dashboard.monthSales")}
+              value={money(monthSales)}
+              icon={<CalendarDays className="size-5" />}
               tone="emerald"
+              hint={`${t("dashboard.totalSales")}: ${money(salesTotal)}`}
             />
             <StatCard
               label={t("dashboard.expenses")}
@@ -172,6 +230,30 @@ export default function DashboardPage() {
               value={money(netProfit)}
               icon={<Wallet className="size-5" />}
               tone={netProfit >= 0 ? "emerald" : "rose"}
+            />
+            <StatCard
+              label={t("dashboard.customers")}
+              value={String(customers.length)}
+              icon={<Users className="size-5" />}
+              tone="sky"
+            />
+            <StatCard
+              label={t("dashboard.orders")}
+              value={String(ordersCount)}
+              icon={<ShoppingCart className="size-5" />}
+              tone="violet"
+            />
+            <StatCard
+              label={t("dashboard.products")}
+              value={String(products.length)}
+              icon={<Package className="size-5" />}
+              tone="amber"
+            />
+            <StatCard
+              label={t("dashboard.stockValue")}
+              value={money(stockValue)}
+              icon={<Boxes className="size-5" />}
+              tone="primary"
             />
           </div>
 
@@ -211,8 +293,59 @@ export default function DashboardPage() {
             )}
           </div>
 
+          {/* الرسوم البيانية */}
+          <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <Card>
+              <CardTitle
+                action={
+                  <span className="text-[11px] font-semibold text-slate-400">
+                    {t("dashboard.last7days")}
+                  </span>
+                }
+              >
+                {t("dashboard.chartDays")}
+              </CardTitle>
+              <div className="px-4 pb-5 pt-1">
+                <BarSeriesChart data={daySeries} emptyLabel={t("common.noData")} />
+              </div>
+            </Card>
+
+            <Card>
+              <CardTitle
+                action={
+                  <span className="text-[11px] font-semibold text-slate-400">
+                    {t("dashboard.last6months")}
+                  </span>
+                }
+              >
+                {t("dashboard.chartMonths")}
+              </CardTitle>
+              <div className="px-4 pb-5 pt-1">
+                <BarSeriesChart data={monthSeries} emptyLabel={t("common.noData")} />
+              </div>
+            </Card>
+
+            <Card>
+              <CardTitle>{t("dashboard.chartTopProducts")}</CardTitle>
+              <div className="px-4 pb-5 pt-1">
+                <RankBarsChart data={topProducts} emptyLabel={t("common.noData")} />
+              </div>
+            </Card>
+
+            <Card>
+              <CardTitle>{t("dashboard.chartCategory")}</CardTitle>
+              <div className="px-4 pb-5 pt-1">
+                <DonutChart
+                  data={categorySeries}
+                  emptyLabel={t("common.noData")}
+                  centerLabel={t("common.total")}
+                />
+              </div>
+            </Card>
+          </div>
+
+          {/* آخر المبيعات + العملاء الجدد */}
           <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-5">
-            {/* آخر المبيعات */}
             <Card className="lg:col-span-3">
               <CardTitle
                 action={
@@ -261,12 +394,12 @@ export default function DashboardPage() {
               </div>
             </Card>
 
-            {/* منخفضو المخزون */}
+            {/* العملاء الجدد */}
             <Card className="lg:col-span-2">
               <CardTitle
                 action={
                   <Link
-                    href="/inventory"
+                    href="/customers"
                     className="flex items-center gap-1 text-xs font-bold text-primary-600 hover:text-primary-700"
                   >
                     {t("dashboard.viewAll")}
@@ -274,36 +407,34 @@ export default function DashboardPage() {
                   </Link>
                 }
               >
-                {t("dashboard.lowStock")}
+                {t("dashboard.recentCustomers")}
               </CardTitle>
               <div className="mt-2 px-4 pb-4">
-                {lowStock.length === 0 ? (
-                  <p className="py-8 text-center text-xs text-slate-400">
-                    {t("dashboard.noLowStock")}
-                  </p>
+                {recentCustomers.length === 0 ? (
+                  <p className="py-8 text-center text-xs text-slate-400">{t("common.noData")}</p>
                 ) : (
                   <ul className="space-y-2">
-                    {lowStock.slice(0, 6).map((p) => (
+                    {recentCustomers.map((c) => (
                       <li
-                        key={p.id}
+                        key={c.id}
                         className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 px-3 py-2.5"
                       >
                         <span className="flex min-w-0 items-center gap-2.5">
-                          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-500">
-                            <PackageX className="size-4" />
+                          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sky-50 text-sky-500">
+                            <Users className="size-4" />
                           </span>
                           <span className="min-w-0">
                             <span className="block truncate text-xs font-bold text-slate-700">
-                              {p.name}
+                              {c.name}
                             </span>
-                            <span className="text-[10px] text-slate-400" dir="ltr">
-                              {p.sku}
+                            <span className="block truncate text-[10px] text-slate-400" dir="auto">
+                              {c.phone || c.email || "—"}
                             </span>
                           </span>
                         </span>
-                        <Badge tone={p.stock <= 0 ? "rose" : "amber"}>
-                          {p.stock} / {p.minStock}
-                        </Badge>
+                        <span className="shrink-0 text-[10px] text-slate-400">
+                          {formatDate(c.createdAt.slice(0, 10), lang)}
+                        </span>
                       </li>
                     ))}
                   </ul>
@@ -311,6 +442,59 @@ export default function DashboardPage() {
               </div>
             </Card>
           </div>
+
+          {/* تنبيهات انخفاض المخزون */}
+          <Card className="mt-4">
+            <CardTitle
+              action={
+                <Link
+                  href="/inventory"
+                  className="flex items-center gap-1 text-xs font-bold text-primary-600 hover:text-primary-700"
+                >
+                  {t("dashboard.viewAll")}
+                  <ArrowLeft className="size-3.5 rtl:rotate-180" />
+                </Link>
+              }
+            >
+              <span className="flex items-center gap-2">
+                <PackageX className="size-4 text-amber-500" />
+                {t("dashboard.lowStock")}
+              </span>
+            </CardTitle>
+            <div className="mt-3 px-4 pb-4">
+              {lowStock.length === 0 ? (
+                <p className="py-6 text-center text-xs text-slate-400">
+                  {t("dashboard.noLowStock")}
+                </p>
+              ) : (
+                <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {lowStock.slice(0, 9).map((p) => (
+                    <li
+                      key={p.id}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 px-3 py-2.5"
+                    >
+                      <span className="flex min-w-0 items-center gap-2.5">
+                        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-500">
+                          <PackageX className="size-4" />
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block truncate text-xs font-bold text-slate-700">
+                            {p.name}
+                          </span>
+                          <span className="text-[10px] text-slate-400" dir="ltr">
+                            {p.sku}
+                          </span>
+                        </span>
+                      </span>
+                      <Badge tone={p.stock <= 0 ? "rose" : "amber"}>
+                        {p.stock} / {p.minStock}
+                      </Badge>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </Card>
         </>
       )}
     </div>
