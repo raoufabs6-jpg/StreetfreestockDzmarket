@@ -13,6 +13,7 @@ import {
   BarChart3,
   ShieldCheck,
   Settings,
+  Gem,
   type LucideIcon,
 } from "lucide-react";
 import type { MessageKey } from "@/lib/i18n/ar";
@@ -48,6 +49,7 @@ export const NAV_SECTIONS: Array<{ titleKey: MessageKey; items: NavItem[] }> = [
     items: [
       { module: "reports", href: "/reports", labelKey: "nav.reports", icon: BarChart3 },
       { module: "users", href: "/users", labelKey: "nav.users", icon: ShieldCheck },
+      { module: "settings", href: "/subscription", labelKey: "nav.subscription", icon: Gem },
       { module: "settings", href: "/settings", labelKey: "nav.settings", icon: Settings },
     ],
   },

@@ -25,6 +25,7 @@ import { cn, docTotal, formatMoney, formatDate, todayISO, daysAgoISO } from "@/l
 import type { Customer, Expense, Invoice, Product, Sale } from "@/lib/types";
 import { Badge, Button, Card, CardTitle, EmptyState, PageHeader, Spinner } from "@/components/ui/primitives";
 import { BarSeriesChart, RankBarsChart, DonutChart, type ChartDatum } from "@/components/dashboard/charts";
+import { DashboardPlanCard } from "@/components/subscription/plan-panels";
 
 /* ------------------------------ بطاقة إحصائية ------------------------------ */
 
@@ -291,6 +292,11 @@ export default function DashboardPage() {
                 </Button>
               </Link>
             )}
+          </div>
+
+          {/* الاشتراك — الخطة الحالية · الاستخدام · المتبقي */}
+          <div className="mt-5">
+            <DashboardPlanCard />
           </div>
 
           {/* الرسوم البيانية */}

@@ -799,6 +799,111 @@ async function main() {
   });
   ok(dashPage.status === 200, "صفحة لوحة التحكم → 200", dashPage.status);
 
+  /* ---------- 12) الاشتراك SaaS: تجربة · حدود · صفحات عامة ---------- */
+  console.log("\n[12] الاشتراك SaaS: تجربة14 يومًا · حدود الخطة · صفحة الأسعار");
+
+  // صورة الاشتراك بعد التهيئة: تجربة على BUSINESS
+  const sub0 = await call("GET", "/api/subscription", E);
+  ok(sub0.status === 200, "GET /api/subscription → 200", sub0.status);
+  const sub = sub0.json?.data;
+  ok(sub?.plan === "business" && sub?.status === "trial", "مؤسسة جديدة في تجربة BUSINESS", sub);
+  ok(sub?.trialEndsAt != null && new Date(sub.trialEndsAt).getTime() > Date.now(), "trialEndsAt في المستقبل", sub?.trialEndsAt);
+  ok(sub?.daysLeft >= 1 && sub?.daysLeft <= 14, "أيام التجربة المتبقية بين 1 و14", sub?.daysLeft);
+  ok(sub?.limits?.users === 15 && sub?.limits?.storageMB === 500, "حدود BUSINESS: 15 مستخدمًا · 500 م.ب", sub?.limits);
+
+  // الاستخدام حقيقي من قاعدة البيانات (أطوال القوائم + بايتات التخزين)
+  const customersNow = await call("GET", "/api/v1/customers", E);
+  ok(
+    sub?.usage?.customers === (customersNow.json?.data?.length ?? -1),
+    "usage.customers = عدد العملاء الحقيقي",
+    { usage: sub?.usage?.customers, list: customersNow.json?.data?.length },
+  );
+  const productsNow = await call("GET", "/api/v1/products", E);
+  ok(
+    sub?.usage?.products === (productsNow.json?.data?.length ?? -1),
+    "usage.products = عدد المنتجات الحقيقي",
+    { usage: sub?.usage?.products, list: productsNow.json?.data?.length },
+  );
+  ok(
+    typeof sub?.usage?.storageBytes === "number" && sub.usage.storageBytes > 0,
+    "مساحة التخزين = pg_column_size > 0",
+    sub?.usage?.storageBytes,
+  );
+  ok(
+    sub?.remaining?.products === sub.limits.products - sub.usage.products,
+    "remaining.products = limit − usage",
+    sub?.remaining?.products,
+  );
+
+  // تبديل داخل التجربة: BASIC يُقبل بنفس التجربة
+  const toBasic = await call("PUT", "/api/subscription", E, { plan: "basic" });
+  ok(
+    toBasic.status === 200 && toBasic.json?.data?.plan === "basic" && toBasic.json?.data?.status === "trial",
+    "تبديل إلى BASIC أثناء التجربة → 200 (نفس التجربة)",
+    toBasic.json?.data,
+  );
+
+  // انتهاء التجربة: ترقية كسولة إلى expired + رفض الخطة المدفوعة (جاهزية Stripe)
+  const meE = await call("GET", "/api/auth/me", E);
+  const orgIdE = meE.json?.data?.organization?.id;
+  ok(typeof orgIdE === "string" && orgIdE.length > 0, "جلسة مؤسسة الجلسة الحالية من /api/auth/me", orgIdE);
+  await pg.query(
+    `UPDATE "Subscription" SET "trialEndsAt" = now() - interval '1 day' WHERE "organizationId" = $1`,
+    [orgIdE],
+  );
+  const paid = await call("PUT", "/api/subscription", E, { plan: "business" });
+  ok(paid.status === 403, "خطة مدفوعة بعد انتهاء التجربة → 403 (Stripe لاحقًا)", paid.status);
+  const subExpired = await call("GET", "/api/subscription", E);
+  ok(subExpired.json?.data?.status === "expired", "الحالة تُرقّى تلقائيًا إلى expired", subExpired.json?.data?.status);
+  ok(subExpired.json?.data?.effectivePlan === "free", "الخطة الفعلية بعد الانتهاء = free", subExpired.json?.data?.effectivePlan);
+
+  // التحول إلى FREE يُقبل دائمًا وضبط الحدود
+  const toFree = await call("PUT", "/api/subscription", E, { plan: "free" });
+  ok(
+    toFree.status === 200 && toFree.json?.data?.plan === "free" && toFree.json?.data?.effectivePlan === "free",
+    "تبديل إلى FREE → 200 (خطة فعلية free)",
+    toFree.json?.data?.plan,
+  );
+  ok(toFree.json?.data?.limits?.users === 3, "حدود FREE فعّالة: 3 مستخدمين", toFree.json?.data?.limits?.users);
+
+  // فرض حد المستخدمين: ملء الحد ثم الرفض بـ403
+  const usersNow = await call("GET", "/api/v1/users", E);
+  let ucount = usersNow.json?.data?.length ?? 0;
+  while (ucount < 3) {
+    const r = await call("POST", "/api/v1/users", E, {
+      name: `حد-خطة-${ucount}`,
+      email: `limit-plan-${ucount}@test.dz`,
+      phone: "",
+      role: "employee",
+      status: "active",
+    });
+    ok(r.status === 201, `ملء حد المستخدمين في FREE (${ucount + 1}/3) → 201`, r.status);
+    ucount++;
+  }
+  const over = await call("POST", "/api/v1/users", E, {
+    name: "مستخدم زائد",
+    email: "limit-plan-over@test.dz",
+    phone: "",
+    role: "employee",
+    status: "active",
+  });
+  ok(over.status === 403, "تجاوز حد مستخدمي FREE → 403 (خطة أعلى)", over.status);
+
+  // الصفحات: الأسعار عامة، الاشتراك محمي بالجلسة
+  const pricingPage = await fetch(`${BASE}/pricing`, { redirect: "manual" });
+  ok(pricingPage.status === 200, "صفحة الأسعار /pricing عامة → 200", pricingPage.status);
+  const subPage = await fetch(`${BASE}/subscription`, {
+    headers: { cookie: E },
+    redirect: "manual",
+  });
+  ok(subPage.status === 200, "صفحة الاشتراك بجلسة → 200", subPage.status);
+  const subPageNo = await fetch(`${BASE}/subscription`, { redirect: "manual" });
+  ok(
+    subPageNo.status >= 300 && subPageNo.status < 400,
+    "صفحة الاشتراك بدون جلسة → تحويل",
+    subPageNo.status,
+  );
+
   await pg.end();
 
   console.log(`\n════════ النتيجة: ${passed} نجح / ${failed} فشل ════════`);

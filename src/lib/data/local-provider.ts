@@ -92,6 +92,21 @@ class LocalStorageProvider implements DataProvider {
   }
 
   async create<T>(collection: CollectionName, value: T & { id: string }): Promise<T> {
+    // فرض حدود الخطة — مطابق لسلوك الخادم (users/products/customers/invoices)
+    const limitedMap: Partial<Record<CollectionName, "users" | "products" | "customers" | "invoices">> = {
+      users: "users",
+      products: "products",
+      customers: "customers",
+      invoices: "invoices",
+    };
+    const limitKey = limitedMap[collection];
+    if (limitKey) {
+      const info = await this.buildSubscriptionInfo();
+      const limit = info.limits[limitKey];
+      if (limit !== null && info.usage[limitKey] >= limit) {
+        throw new Error(`بلغت حد خطة ${info.effectivePlan.toUpperCase()} — وسّع خطتك من صفحة الأسعار`);
+      }
+    }
     const rows = this.rows<T>(collection);
     const base = value as T & { id: string; createdAt?: string };
     // الفاتورة: لقطة بنود بأسماء منسوخة + مبلغ محسب (مطابق لسلوك الخادم)
