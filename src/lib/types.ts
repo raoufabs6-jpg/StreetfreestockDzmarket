@@ -109,7 +109,8 @@ export interface Expense extends BaseRecord {
   note: string;
 }
 
-export type Role = "admin" | "manager" | "staff";
+export const ROLES = ["owner", "admin", "manager", "employee"] as const;
+export type Role = (typeof ROLES)[number];
 export type UserStatus = "active" | "invited" | "disabled";
 
 /** مستخدم النظام */
@@ -188,7 +189,15 @@ export const MODULES = [
 export type ModuleKey = (typeof MODULES)[number];
 export type PermissionAction = "view" | "manage";
 
+/**
+ * الصلاحيات الافتراضية لكل دور:
+ • OWNER: صلاحيات كاملة (يتجاوز المصفوفة في الخادم أيضًا)
+ • ADMIN: إدارة معظم النظام (كل الوحدات)
+ • MANAGER: المبيعات والعملاء والمخزون والمشتريات والتقارير
+ • EMPLOYEE: إضافة المبيعات وعرض ما يُمنح له من صلاحيات (قابل للتوسعة من الإعدادات)
+ */
 export const DEFAULT_ROLE_PERMISSIONS: Record<Role, string[]> = {
+  owner: MODULES.flatMap((m) => [`${m}.view`, `${m}.manage`]),
   admin: MODULES.flatMap((m) => [`${m}.view`, `${m}.manage`]),
   manager: [
     ...MODULES.filter((m) => m !== "users").flatMap((m) => [`${m}.view`]),
@@ -197,7 +206,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, string[]> = {
     ).map((m) => `${m}.manage`),
     "reports.manage",
   ],
-  staff: [
+  employee: [
     "dashboard.view",
     "customers.view",
     "products.view",

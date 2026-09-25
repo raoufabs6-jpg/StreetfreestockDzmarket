@@ -135,7 +135,7 @@ export const expenseSchema = z.object({
   note,
 });
 
-export const roleValues = ["admin", "manager", "staff"] as const;
+export const roleValues = ["owner", "admin", "manager", "employee"] as const;
 export const userStatusValues = ["active", "invited", "disabled"] as const;
 
 export const userSchema = z.object({
@@ -203,5 +203,19 @@ export const setupSchema = z.object({
   organizationName: z.string().trim().min(2, "اسم المؤسسة قصير جدًا").max(200),
   name: z.string().trim().min(2, "الاسم قصير جدًا").max(200),
   email: z.string().trim().email("أدخل بريدًا إلكترونيًا صالحًا"),
+  password: z.string().min(8, "كلمة المرور يجب أن تكون 8 أحرف على الأقل").max(200),
+});
+
+/** تسجيل حساب جديد: يُنشئ مؤسسة + مستخدم مالك (OWNER) ويسجّل الدخول */
+export const registerSchema = setupSchema;
+
+/** طلب استعادة كلمة المرور — الرد موحّد سواء وُجد البريد أم لا (لا كشف الحسابات) */
+export const forgotPasswordSchema = z.object({
+  email: z.string().trim().email("أدخل بريدًا إلكترونيًا صالحًا"),
+});
+
+/** تعيين كلمة مرور جديدة عبر الرمز المؤقت */
+export const resetPasswordSchema = z.object({
+  token: z.string().trim().min(10, "رمز الاستعادة غير صالح"),
   password: z.string().min(8, "كلمة المرور يجب أن تكون 8 أحرف على الأقل").max(200),
 });

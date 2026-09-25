@@ -79,6 +79,14 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
             />
+            <div className="-mt-1 text-xs">
+              <Link
+                href="/forgot-password"
+                className="font-bold text-primary-600 hover:text-primary-700"
+              >
+                {t("auth.forgotPassword")}
+              </Link>
+            </div>
             <Button type="submit" className="w-full" disabled={loading}>
               <LogIn className="size-4" />
               {loading ? "..." : t("auth.signIn")}
@@ -87,8 +95,8 @@ export default function LoginPage() {
         </form>
 
         <div className="mt-4 flex items-center justify-between text-xs">
-          <span className="text-slate-400">{t("auth.haveAccount")}</span>
-          <Link href="/setup" className="font-bold text-primary-600 hover:text-primary-700">
+          <span className="text-slate-400">{t("auth.noAccount")}</span>
+          <Link href="/register" className="font-bold text-primary-600 hover:text-primary-700">
             {t("auth.createCta")}
           </Link>
         </div>

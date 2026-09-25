@@ -45,9 +45,9 @@ export async function PUT(req: Request) {
       assertCan(ctx, "settings.manage");
     }
 
-    // مصفوفة الصلاحيات: للمدير فقط (server-side)
-    if (body.rolePermissions !== undefined && ctx.role !== "admin") {
-      throw forbidden("تعديل الصلاحيات لمدير النظام فقط");
+    // مصفوفة الصلاحيات: للمالك أو مدير النظام فقط (server-side)
+    if (body.rolePermissions !== undefined && ctx.role !== "owner" && ctx.role !== "admin") {
+      throw forbidden("تعديل مصفوفة الصلاحيات للمالك أو مدير النظام فقط");
     }
 
     // التبديل بين الحسابات: داخل نفس المؤسسة فقط

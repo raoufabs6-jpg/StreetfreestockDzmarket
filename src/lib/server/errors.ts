@@ -27,6 +27,8 @@ export const forbidden = (message = "ليس لديك صلاحية لهذا ال�
 export const notFound = (message = "السجل غير موجود") =>
   new ApiError(404, "NOT_FOUND", message);
 export const conflict = (message: string) => new ApiError(409, "CONFLICT", message);
+export const tooManyRequests = (message = "محاولات كثيرة — انتظر قليلًا ثم أعد المحاولة") =>
+  new ApiError(429, "RATE_LIMITED", message);
 export const serverError = (message = "خطأ داخلي في الخادم") =>
   new ApiError(500, "INTERNAL_ERROR", message);
 

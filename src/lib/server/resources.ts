@@ -8,7 +8,7 @@
 
 import { prisma } from "./db";
 import { assertCan, type OrgContext } from "./auth";
-import { badRequest, conflict, notFound } from "./errors";
+import { badRequest, conflict, forbidden, notFound } from "./errors";
 import * as v from "./validation";
 import type { z } from "zod";
 
@@ -636,6 +636,10 @@ const users = guarded("users", {
     ),
   create: async (ctx, body) => {
     const data = v.userSchema.parse(body);
+    // منح دور المالك للمدير فقط (تسلسل الصلاحيات)
+    if (data.role === "owner" && ctx.role !== "owner") {
+      throw forbidden("منح دور المالك للمدير فقط");
+    }
     // حساب جديد بلا كلمة مرور (يُفعّل لاحقًا) — لا نُنشئ جلسات هنا
     return prisma.user.create({
       data: { ...data, organizationId: ctx.organizationId },
@@ -644,9 +648,24 @@ const users = guarded("users", {
   },
   update: async (ctx, id, body) => {
     const data = v.userSchema.partial().parse(body);
-    await findScopedOrThrow(
-      await prisma.user.findFirst({ where: { id, organizationId: ctx.organizationId } }),
+    const target = await findScopedOrThrow(
+      await prisma.user.findFirst({
+        where: { id, organizationId: ctx.organizationId },
+        select: USER_SELECT,
+      }),
     );
+    // تسلسل الصلاحيات: لا يُغيَّر دور/حالة حساب المالك إلا بواسطة مالك
+    if (
+      target.role === "owner" &&
+      ctx.role !== "owner" &&
+      (data.role !== undefined || data.status !== undefined)
+    ) {
+      throw forbidden("لا يمكن تغيير دور أو حالة حساب مالك إلا بواسطة مالك آخر");
+    }
+    // منح دور المالك للمدير فقط
+    if (data.role === "owner" && ctx.role !== "owner") {
+      throw forbidden("منح دور المالك للمدير فقط");
+    }
     if (id === ctx.userId) {
       if (data.role && data.role !== ctx.role) {
         throw badRequest("لا يمكنك تغيير دور حسابك الحالي");
@@ -659,9 +678,15 @@ const users = guarded("users", {
   },
   remove: async (ctx, id) => {
     if (id === ctx.userId) throw badRequest("لا يمكنك حذف حسابك الحالي");
-    await findScopedOrThrow(
-      await prisma.user.findFirst({ where: { id, organizationId: ctx.organizationId } }),
+    const target = await findScopedOrThrow(
+      await prisma.user.findFirst({
+        where: { id, organizationId: ctx.organizationId },
+        select: USER_SELECT,
+      }),
     );
+    if (target.role === "owner" && ctx.role !== "owner") {
+      throw forbidden("لا يمكن حذف حساب مالك إلا بواسطة مالك آخر");
+    }
     await prisma.user.delete({ where: { id } });
   },
 });

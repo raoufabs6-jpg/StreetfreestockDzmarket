@@ -12,7 +12,7 @@ import { useToast } from "@/components/ui/toast";
 import { CrudPage } from "@/components/crud/crud-page";
 import { Button, Card, CardTitle } from "@/components/ui/primitives";
 
-const MATRIX_ROLES: Role[] = ["manager", "staff"];
+const MATRIX_ROLES: Role[] = ["manager", "employee"];
 
 function PermsMatrix() {
   const { t } = useI18n();

@@ -18,6 +18,8 @@ export interface SessionPayload {
   /** organizationId — مصدر عزل البيانات */
   org: string;
   role: Role;
+  /** إصدار الجلسة — يجب مطابقته مع user.sessionVersion (للإبطال عند تغيير كلمة المرور) */
+  v?: number;
   exp: number;
 }
 
@@ -108,12 +110,18 @@ export async function requireOrgContext(): Promise<OrgContext> {
       name: true,
       role: true,
       status: true,
+      sessionVersion: true,
       organization: { select: { rolePermissions: true } },
     },
   });
 
-  // حماية إضافية: المستخدم حُذف/عُطّل أو تغيّرت مؤسسته
-  if (!user || user.organizationId !== session.org || user.status === "disabled") {
+  // حماية إضافية: المستخدم حُذف/عُطّل أو تغيّرت مؤسسته أو أُبطلت جلسته (تغيير كلمة المرور)
+  if (
+    !user ||
+    user.organizationId !== session.org ||
+    user.status === "disabled" ||
+    (session.v ?? 0) !== user.sessionVersion
+  ) {
     throw unauthorized("الجلسة لم تعد صالحة، سجّل الدخول مجددًا");
   }
 
@@ -128,19 +136,21 @@ export async function requireOrgContext(): Promise<OrgContext> {
     email: user.email,
     name: user.name,
     rolePermissions: {
+      owner: perms.owner ?? DEFAULT_ROLE_PERMISSIONS.owner,
       admin: perms.admin ?? DEFAULT_ROLE_PERMISSIONS.admin,
       manager: perms.manager ?? DEFAULT_ROLE_PERMISSIONS.manager,
-      staff: perms.staff ?? DEFAULT_ROLE_PERMISSIONS.staff,
+      employee: perms.employee ?? DEFAULT_ROLE_PERMISSIONS.employee,
     },
   };
 }
 
 /**
  * فحص الصلاحية على مستوى الخادم (نفس دلالة العميل):
- * admin يملك كل شيء، وإلا يجب وجود "الوحدة.الإجراء" في مصفوفة الدور.
+ * OWNER وADMIN يملكان كل الوحدات (صلاحية كاملة/معظم النظام)،
+ * وإلا يجب وجود "الوحدة.الإجراء" في مصفوفة الدور.
  */
 export function can(ctx: OrgContext, permission: string): boolean {
-  if (ctx.role === "admin") return true;
+  if (ctx.role === "owner" || ctx.role === "admin") return true;
   return (ctx.rolePermissions[ctx.role] ?? []).includes(permission);
 }
 

@@ -19,10 +19,12 @@ datasource db {
 
 // ------------------------- Enums -------------------------
 
+/// أدوار نظام AKMA — التسلسل: owner > admin > manager > employee
 enum role {
+  owner
   admin
   manager
-  staff
+  employee
 }
 
 enum userStatus {
@@ -108,6 +110,7 @@ model Organization {
   expenses           Expense[]
   payments           Payment[]
   notifications      Notification[]
+  passwordResetTokens PasswordResetToken[]
 
   @@index([createdAt])
 }
@@ -124,7 +127,7 @@ model User {
   phone        String?
   /// scrypt: "salt:hash" — لا يُرسل للعميل إطلاقًا
   passwordHash String?
-  role         role       @default(staff)
+  role         role       @default(employee)
   status       userStatus @default(active)
 
   createdAt DateTime @default(now())
@@ -132,8 +135,34 @@ model User {
 
   notifications Notification[]
 
+  /// إصدار الجلسة — يُرفع عند تغيير كلمة المرور لإبطال كل الجلسات القديمة
+  sessionVersion       Int      @default(0)
+  passwordResetTokens  PasswordResetToken[]
+
   @@index([organizationId])
   @@index([organizationId, role])
+}
+
+/// رموز استعادة كلمة المرور — تُخزَّن مُجزّأة (SHA-256) وتنتهي بعد 30 دقيقة
+model PasswordResetToken {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// SHA-256 للرمز الخام — الرمز الأصلي لا يُخزَّن أبدًا
+  tokenHash String
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tokenHash])
+  @@index([organizationId])
+  @@index([userId])
 }
 
 // ------------------------- CRM -------------------------

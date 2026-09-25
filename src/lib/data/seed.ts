@@ -141,9 +141,9 @@ export function buildSeed(): SeedData {
   ];
 
   const users: AppUser[] = [
-    base<AppUser>("usr-1", 90, { name: "أحمد قاسمي", email: "ahmed@akma.dz", phone: "0550 00 00 01", role: "admin", status: "active" }),
+    base<AppUser>("usr-1", 90, { name: "أحمد قاسمي", email: "ahmed@akma.dz", phone: "0550 00 00 01", role: "owner", status: "active" }),
     base<AppUser>("usr-2", 60, { name: "فاطمة زهراء", email: "fatima@akma.dz", phone: "0550 00 00 02", role: "manager", status: "active" }),
-    base<AppUser>("usr-3", 30, { name: "يوسف بن محمد", email: "youcef@akma.dz", phone: "0550 00 00 03", role: "staff", status: "active" }),
+    base<AppUser>("usr-3", 30, { name: "يوسف بن محمد", email: "youcef@akma.dz", phone: "0550 00 00 03", role: "employee", status: "active" }),
   ];
 
   const settings: BusinessSettings = {

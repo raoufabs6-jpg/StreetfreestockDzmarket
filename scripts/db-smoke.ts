@@ -23,16 +23,27 @@ async function main() {
   console.log("• مؤسسة الاختبار:", org.id);
 
   try {
-    // مستخدم
+    // مستخدم (مالك المؤسسة)
     const user = await prisma.user.create({
       data: {
         organizationId: org.id,
-        name: "Smoke Admin",
+        name: "Smoke Owner",
         email: `smoke-${org.id}@test.local`,
-        role: "admin",
+        role: "owner",
       },
     });
     assert(user.id, "إنشاء مستخدم");
+
+    // رمز استعادة كلمة المرور (يُحذف تلقائيًا مع المؤسسة عبر Cascade)
+    const resetToken = await prisma.passwordResetToken.create({
+      data: {
+        organizationId: org.id,
+        userId: user.id,
+        tokenHash: `smoke-${org.id}`,
+        expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+      },
+    });
+    assert(resetToken.id, "إنشاء رمز استعادة كلمة المرور");
 
     // عميل + فئة + منتج + مخزون
     const customer = await prisma.customer.create({

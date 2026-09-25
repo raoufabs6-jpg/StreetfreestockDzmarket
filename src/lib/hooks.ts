@@ -101,15 +101,16 @@ export function useCurrentUser() {
     [users, settings?.currentUserId],
   );
 
-  /** بدون مستخدم محدد → نعتبر المالك admin */
-  const role: Role = user?.role ?? "admin";
+  /** بدون مستخدم محدد → نعتبر المستخدم المالك */
+  const role: Role = user?.role ?? "owner";
   const permissions = useMemo(
     () => settings?.rolePermissions?.[role] ?? [],
     [settings?.rolePermissions, role],
   );
 
+  // المالك ومدير النظام يملكان صلاحية كاملة (مطابق لفحص الخادم)
   const can = useCallback(
-    (perm: string) => role === "admin" || permissions.includes(perm),
+    (perm: string) => role === "owner" || role === "admin" || permissions.includes(perm),
     [role, permissions],
   );
 

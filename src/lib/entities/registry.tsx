@@ -11,7 +11,7 @@ import { Badge, type BadgeTone } from "@/components/ui/primitives";
 import type { TableColumn } from "@/components/ui/data-table";
 import { useI18n, type Lang, type MessageKey } from "@/lib/i18n";
 import { useCollection, useSettings, useCurrentUser } from "@/lib/hooks";
-import { CURRENCIES, type CurrencyCode } from "@/lib/types";
+import { CURRENCIES, ROLES, type CurrencyCode } from "@/lib/types";
 import type {
   AppUser,
   Customer,
@@ -133,9 +133,10 @@ const invoiceTone: Record<string, BadgeTone> = {
   overdue: "rose",
 };
 const roleTone: Record<string, BadgeTone> = {
-  admin: "primary",
-  manager: "sky",
-  staff: "slate",
+  owner: "primary",
+  admin: "sky",
+  manager: "emerald",
+  employee: "slate",
 };
 const userStatusTone: Record<string, BadgeTone> = {
   active: "emerald",
@@ -641,7 +642,7 @@ const builders: { [K in EntityKey]: (ctx: BuildCtx) => EntityConfig<EntityMap[K]
     searchKeys: ["name", "email"],
     searchPlaceholder: t("field.emailOrName"),
     rowName: (r) => r.name,
-    defaultValues: () => ({ name: "", email: "", phone: "", role: "staff", status: "invited" }),
+    defaultValues: () => ({ name: "", email: "", phone: "", role: "employee", status: "invited" }),
     blockDelete: (r) => (r.id === deps.currentUserId ? t("toast.deleteSelfBlocked") : null),
     fields: [
       { key: "name", label: t("common.fullName"), kind: "text", required: true, span: 2 },
@@ -652,7 +653,7 @@ const builders: { [K in EntityKey]: (ctx: BuildCtx) => EntityConfig<EntityMap[K]
         label: t("field.role"),
         kind: "select",
         required: true,
-        options: (["admin", "manager", "staff"] as const).map((r) => ({
+        options: ROLES.map((r) => ({
           value: r,
           label: t(`enum.role.${r}` as MessageKey),
         })),
@@ -704,7 +705,7 @@ const builders: { [K in EntityKey]: (ctx: BuildCtx) => EntityConfig<EntityMap[K]
       {
         id: "role",
         label: t("field.role"),
-        options: (["admin", "manager", "staff"] as const).map((r) => ({
+        options: ROLES.map((r) => ({
           value: r,
           label: t(`enum.role.${r}` as MessageKey),
         })),
