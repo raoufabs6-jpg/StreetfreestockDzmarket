@@ -233,6 +233,7 @@ const builders: { [K in EntityKey]: (ctx: BuildCtx) => EntityConfig<EntityMap[K]
         stock: 0,
         minStock: 3,
         description: "",
+        status: "active",
       }),
       fields: [
         { key: "name", label: t("common.name"), kind: "text", required: true, span: 2 },
@@ -252,6 +253,15 @@ const builders: { [K in EntityKey]: (ctx: BuildCtx) => EntityConfig<EntityMap[K]
         { key: "unitPrice", label: t("field.unitPrice"), kind: "currency", required: true, min: 0 },
         { key: "stock", label: t("field.stock"), kind: "number", required: true, min: 0 },
         { key: "minStock", label: t("field.minStock"), kind: "number", min: 0 },
+        {
+          key: "status",
+          label: t("common.status"),
+          kind: "select",
+          options: (["active", "inactive"] as const).map((s) => ({
+            value: s,
+            label: t(`enum.product_status.${s}` as MessageKey),
+          })),
+        },
         { key: "description", label: t("common.description"), kind: "textarea", span: 2 },
       ],
       columns: [
@@ -279,6 +289,16 @@ const builders: { [K in EntityKey]: (ctx: BuildCtx) => EntityConfig<EntityMap[K]
             </Badge>
           ),
         },
+        {
+          key: "status",
+          header: t("common.status"),
+          render: (r) => (
+            <Badge tone={r.status === "inactive" ? "slate" : "emerald"}>
+              {t(`enum.product_status.${r.status === "inactive" ? "inactive" : "active"}` as MessageKey)}
+            </Badge>
+          ),
+          hideBelow: "md",
+        },
       ],
       filters: [
         {
@@ -286,6 +306,15 @@ const builders: { [K in EntityKey]: (ctx: BuildCtx) => EntityConfig<EntityMap[K]
           label: t("common.category"),
           options: [], // تُملأ ديناميكيًا من الصفوف (أدناه)
           apply: () => true,
+        },
+        {
+          id: "status",
+          label: t("common.status"),
+          options: (["active", "inactive"] as const).map((s) => ({
+            value: s,
+            label: t(`enum.product_status.${s}` as MessageKey),
+          })),
+          apply: (r, v) => (r.status ?? "active") === v,
         },
         {
           id: "stock",
@@ -316,6 +345,8 @@ const builders: { [K in EntityKey]: (ctx: BuildCtx) => EntityConfig<EntityMap[K]
     searchKeys: ["name", "contactName", "email", "phone"],
     searchPlaceholder: t("field.searchByName"),
     rowName: (r) => r.name,
+    // صفحة تفاصيل المورد (ERP): بيانات + مشتريات + مبالغ مستحقة
+    rowLink: (r) => `/suppliers/${r.id}`,
     defaultValues: () => ({ name: "", contactName: "", email: "", phone: "", address: "", note: "" }),
     fields: [
       { key: "name", label: t("common.name"), kind: "text", required: true, span: 2 },
@@ -326,7 +357,18 @@ const builders: { [K in EntityKey]: (ctx: BuildCtx) => EntityConfig<EntityMap[K]
       { key: "note", label: t("common.note"), kind: "textarea", span: 2, placeholder: t("field.notePlaceholder") },
     ],
     columns: [
-      { key: "name", header: t("common.name"), render: (r) => <span className="font-semibold text-slate-800">{r.name}</span> },
+      {
+        key: "name",
+        header: t("common.name"),
+        render: (r) => (
+          <Link
+            href={`/suppliers/${r.id}`}
+            className="font-semibold text-slate-800 transition hover:text-primary-600"
+          >
+            {r.name}
+          </Link>
+        ),
+      },
       { key: "contactName", header: t("field.contactName"), render: (r) => r.contactName || "—", hideBelow: "md" },
       { key: "phone", header: t("common.phone"), render: (r) => <span dir="ltr">{r.phone || "—"}</span> },
       { key: "email", header: t("common.email"), render: (r) => r.email || "—", hideBelow: "lg" },
@@ -374,11 +416,13 @@ const builders: { [K in EntityKey]: (ctx: BuildCtx) => EntityConfig<EntityMap[K]
           required: true,
           span: 2,
           priceMode: "sale",
-          productOptions: deps.products.map((p) => ({
-            value: p.id,
-            label: `${p.name} — ${p.sku}`,
-            price: p.unitPrice,
-          })),
+          productOptions: deps.products
+            .filter((p) => p.status !== "inactive")
+            .map((p) => ({
+              value: p.id,
+              label: `${p.name} — ${p.sku}`,
+              price: p.unitPrice,
+            })),
         },
         { key: "discount", label: t("common.discount"), kind: "currency", min: 0 },
         {

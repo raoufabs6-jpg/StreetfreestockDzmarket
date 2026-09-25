@@ -20,6 +20,7 @@ export async function GET() {
       address: org.address ?? "",
       currency: org.currency as BusinessSettings["currency"],
       currentUserId: ctx.userId,
+      allowOversell: org.allowOversell,
       rolePermissions: (org.rolePermissions ?? DEFAULT_ROLE_PERMISSIONS) as Record<
         Role,
         string[]
@@ -67,6 +68,7 @@ export async function PUT(req: Request) {
         ...(body.phone !== undefined ? { phone: body.phone } : {}),
         ...(body.address !== undefined ? { address: body.address } : {}),
         ...(body.currency !== undefined ? { currency: body.currency } : {}),
+        ...(body.allowOversell !== undefined ? { allowOversell: body.allowOversell } : {}),
         ...(body.rolePermissions !== undefined
           ? { rolePermissions: body.rolePermissions }
           : {}),
@@ -81,6 +83,7 @@ export async function PUT(req: Request) {
       address: org.address ?? "",
       currency: org.currency as BusinessSettings["currency"],
       currentUserId: body.currentUserId ?? ctx.userId,
+      allowOversell: org.allowOversell,
       rolePermissions: (org.rolePermissions ?? DEFAULT_ROLE_PERMISSIONS) as Record<
         Role,
         string[]

@@ -62,6 +62,7 @@ export const categorySchema = z.object({
 });
 
 export const unitValues = ["piece", "kg", "g", "l", "m", "box"] as const;
+export const productStatusValues = ["active", "inactive"] as const;
 
 export const productSchema = z.object({
   name: shortText,
@@ -73,6 +74,7 @@ export const productSchema = z.object({
   stock: z.number().int("الكمية يجب أن تكون عددًا صحيحًا").min(0, "لا يمكن أن تكون سالبة"),
   minStock: z.number().int("الحد يجب أن يكون عددًا صحيحًا").min(0, "لا يمكن أن يكون سالبة"),
   description: note,
+  status: z.enum(productStatusValues, { message: "حالة المنتج غير صالحة" }).optional(),
 });
 
 export const itemSchema = z.object({
@@ -148,13 +150,28 @@ export const userSchema = z.object({
 
 export const movementTypeValues = ["in", "out", "adjust"] as const;
 
-export const movementSchema = z.object({
-  productId: z.string().min(1, "اختر المنتج"),
-  type: z.enum(movementTypeValues, { message: "نوع حركة غير صالح" }),
-  quantity: z.number().int("الكمية يجب أن تكون عددًا صحيحًا").min(1, "الكمية على الأقل 1"),
-  date: dateString,
-  note,
-});
+/**
+ * حركة مخزون:
+ * • in/out: كمية حركة (على الأقل 1) — تُطبَّق كفارق على المخزون
+ * • adjust: تعيين كمية فعلية بعد الجرد (0 مسموح) — تُستبدل الكمية الحالية
+ */
+export const movementSchema = z
+  .object({
+    productId: z.string().min(1, "اختر المنتج"),
+    type: z.enum(movementTypeValues, { message: "نوع حركة غير صالح" }),
+    quantity: z.number().int("الكمية يجب أن تكون عددًا صحيحًا").min(0, "لا يمكن أن تكون سالبة"),
+    date: dateString,
+    note,
+  })
+  .superRefine((v, ctx) => {
+    if (v.type !== "adjust" && v.quantity < 1) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["quantity"],
+        message: "الكمية على الأقل 1",
+      });
+    }
+  });
 
 export const paymentSchema = z.object({
   invoiceId: z.string().optional().nullable(),
@@ -184,6 +201,7 @@ export const settingsSchema = z.object({
   address: emptyToNull(z.string().max(400)),
   currency: z.enum(currencyValues, { message: "عملة غير صالحة" }).optional(),
   currentUserId: z.string().optional().nullable(),
+  allowOversell: z.boolean().optional(),
   rolePermissions: z
     .record(
       z.enum(roleValues),

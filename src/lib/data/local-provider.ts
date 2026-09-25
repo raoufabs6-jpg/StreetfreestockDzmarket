@@ -10,6 +10,8 @@ import {
   DEFAULT_ROLE_PERMISSIONS,
   type BusinessSettings,
   type CollectionName,
+  type Product,
+  type StockMovement,
 } from "@/lib/types";
 import { uid } from "@/lib/utils";
 import { emitDataChanged, type DataProvider } from "./provider";
@@ -27,6 +29,7 @@ export const DEFAULT_SETTINGS: BusinessSettings = {
   currency: "DZD",
   currentUserId: null,
   rolePermissions: DEFAULT_ROLE_PERMISSIONS,
+  allowOversell: false,
 };
 
 function readJSON<T>(key: string, fallback: T): T {
@@ -80,7 +83,24 @@ class LocalStorageProvider implements DataProvider {
     const record = { ...incoming, createdAt: incoming.createdAt ?? new Date().toISOString() } as T;
     rows.unshift(record);
     this.save(collection, rows);
+    // نظام حركة المخزون الآمن: الحركة هي مصدر تحديث المخزون (مطابق لسلوك الخادم)
+    if (collection === "movements") {
+      this.applyMovement(record as unknown as StockMovement);
+    }
     return record;
+  }
+
+  /** تطبيق حركة على مخزون المنتج — in تزيد، out تنقص، adjust تعيّن الكمية */
+  private applyMovement(m: StockMovement): void {
+    const products = this.rows<Product>("products");
+    const idx = products.findIndex((p) => p.id === m.productId);
+    if (idx === -1) return;
+    const current = products[idx].stock ?? 0;
+    const next =
+      m.type === "in" ? current + m.quantity : m.type === "out" ? current - m.quantity : m.quantity;
+    if (next < 0) return; // ممنوع — الواجهة والخادم يتحققان قبل الإنشاء
+    products[idx] = { ...products[idx], stock: next };
+    this.save("products", products);
   }
 
   async update<T>(collection: CollectionName, id: string, patch: Partial<T>): Promise<T> {

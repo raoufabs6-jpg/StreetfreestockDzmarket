@@ -33,6 +33,11 @@ enum userStatus {
   disabled
 }
 
+enum productStatus {
+  active
+  inactive
+}
+
 enum unit {
   piece
   kg
@@ -91,6 +96,9 @@ model Organization {
   currency  String   @default("DZD")
   /// مصفوفة الصلاحيات JSON: { admin: ["dashboard.view", ...], manager: [...] }
   rolePermissions Json?
+
+  /// السماح ببيع أكبر من المخزون المتوفر (طلب مسبق) — يُفحص على الخادم
+  allowOversell Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -244,6 +252,8 @@ model Product {
   /// حد التنبيه — الكمية الفعلية في جدول Inventory
   minStock    Int      @default(0)
   description String?
+  /// حالة المنتج — الموقوف لا يظهر في نماذج البيع ولا يمكن بيعه
+  status      productStatus @default(active)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -288,11 +298,19 @@ model InventoryMovement {
   date     String // YYYY-MM-DD
   note     String?
 
+  /// مرجع المستند الذي أنشأ الحركة (بيع/شراء) — أعمدة تاريخية فقط (بدون FK)
+  /// حتى يبقى سجل الحركات كاملًا بعد حذف المستند، وتُحسب حركات الإلغاء
+  /// من الحركات المرتبطة فقط (منع تعديل خاطئ للمخزون عند الحذف)
+  saleId     String?
+  purchaseId String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([organizationId, date])
   @@index([organizationId, productId])
+  @@index([saleId])
+  @@index([purchaseId])
 }
 
 // ------------------------- المبيعات والمشتريات -------------------------

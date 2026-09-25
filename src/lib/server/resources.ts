@@ -11,6 +11,9 @@ import { assertCan, type OrgContext } from "./auth";
 import { badRequest, conflict, forbidden, notFound } from "./errors";
 import * as v from "./validation";
 import type { z } from "zod";
+import type { Prisma } from "@/generated/prisma/client";
+
+type Tx = Prisma.TransactionClient;
 
 export interface ResourceOps {
   list(ctx: OrgContext): Promise<unknown[]>;
@@ -186,6 +189,7 @@ async function productToDto(ctx: OrgContext, id: string) {
     stock: row.inventory?.quantity ?? 0,
     minStock: row.minStock,
     description: row.description,
+    status: row.status,
   };
 }
 
@@ -209,6 +213,7 @@ const products = guarded("products", {
       stock: row.inventory?.quantity ?? 0,
       minStock: row.minStock,
       description: row.description,
+      status: row.status,
     }));
   },
   get: (ctx, id) => productToDto(ctx, id),
@@ -216,18 +221,30 @@ const products = guarded("products", {
     const data = v.productSchema.parse(body) as ProductInput;
     const { category, stock, ...rest } = data;
     const categoryRow = await resolveCategory(ctx, category);
-    const created = await prisma.product.create({
-      data: { ...rest, categoryId: categoryRow.id, organizationId: ctx.organizationId },
+    // منتج + مخزون افتتاحي + حركة «رصيد افتتاحي» في معاملة واحدة
+    const createdId = await prisma.$transaction(async (tx) => {
+      const created = await tx.product.create({
+        data: { ...rest, categoryId: categoryRow.id, organizationId: ctx.organizationId },
+      });
+      await tx.inventory.create({
+        data: {
+          organizationId: ctx.organizationId,
+          productId: created.id,
+          quantity: stock,
+        },
+      });
+      if (stock > 0) {
+        await logMovement(tx, ctx, {
+          productId: created.id,
+          type: "in",
+          quantity: stock,
+          date: new Date().toISOString().slice(0, 10),
+          note: "رصيد افتتاحي",
+        });
+      }
+      return created.id;
     });
-    // المخزون الابتدائي في جدول Inventory المنفصل
-    await prisma.inventory.create({
-      data: {
-        organizationId: ctx.organizationId,
-        productId: created.id,
-        quantity: stock,
-      },
-    });
-    return productToDto(ctx, created.id);
+    return productToDto(ctx, createdId);
   },
   update: async (ctx, id, body) => {
     const data = v.productSchema.partial().parse(body) as ProductPatch;
@@ -246,11 +263,31 @@ const products = guarded("products", {
       });
     }
     if (stock !== undefined) {
-      await prisma.inventory.upsert({
+      // تعديل مباشر للكمية → يُسجَّل كحركة تسووية (السجل لا يُترك صامتًا)
+      const before = await prisma.inventory.findUnique({
         where: { productId: id },
-        create: { organizationId: ctx.organizationId, productId: id, quantity: stock },
-        update: { quantity: stock },
+        select: { quantity: true },
       });
+      if ((before?.quantity ?? 0) !== stock) {
+        await prisma.$transaction(async (tx) => {
+          await tx.inventory.upsert({
+            where: { productId: id },
+            create: { organizationId: ctx.organizationId, productId: id, quantity: stock },
+            update: { quantity: stock },
+          });
+          await logMovement(tx, ctx, {
+            productId: id,
+            type: "adjust",
+            quantity: stock,
+            date: new Date().toISOString().slice(0, 10),
+            note: "تعديل مباشر من بطاقة المنتج",
+          });
+        });
+      } else if (!before) {
+        await prisma.inventory.create({
+          data: { organizationId: ctx.organizationId, productId: id, quantity: stock },
+        });
+      }
     }
     return productToDto(ctx, id);
   },
@@ -288,23 +325,20 @@ const movements = guarded("inventory", {
 
     const current = product.inventory?.quantity ?? 0;
     const delta = data.type === "in" ? data.quantity : data.type === "out" ? -data.quantity : 0;
-    if (data.type === "adjust") {
-      throw badRequest("نوع التسوية غير مدعوم — استخدم إضافة أو سحب");
-    }
-    if (current + delta < 0) {
+    if (data.type !== "adjust" && current + delta < 0) {
       throw badRequest(`الكمية المتوفرة (${current}) لا تكفي العملية`);
     }
 
     return prisma.$transaction(async (tx) => {
-      await tx.inventory.upsert({
-        where: { productId: product.id },
-        create: {
-          organizationId: ctx.organizationId,
-          productId: product.id,
-          quantity: current + delta,
-        },
-        update: { quantity: { increment: delta } },
-      });
+      if (data.type === "adjust") {
+        // تعديل الكمية (جرد): تعيين القيمة الفعلية — يقبل الصفر
+        await setStock(tx, ctx, product.id, data.quantity);
+      } else {
+        await changeStock(tx, ctx, product.id, delta, {
+          allowNegative: false,
+          label: product.name,
+        });
+      }
       return tx.inventoryMovement.create({
         data: { ...data, organizationId: ctx.organizationId },
       });
@@ -338,17 +372,118 @@ async function assertSupplierInOrg(ctx: OrgContext, supplierId: string) {
   return row;
 }
 
-async function assertProductsInOrg(ctx: OrgContext, productIds: string[]) {
-  const unique = [...new Set(productIds)];
-  const found = await prisma.product.findMany({
+async function loadProductsInOrg(
+  ctx: OrgContext,
+  ids: string[],
+  tx?: Tx,
+): Promise<
+  Array<{ id: string; name: string; status: "active" | "inactive"; inventory: { quantity: number } | null }>
+> {
+  const unique = [...new Set(ids)];
+  if (unique.length === 0) return [];
+  const db = tx ?? prisma;
+  const found = await db.product.findMany({
     where: { organizationId: ctx.organizationId, id: { in: unique } },
-    select: { id: true },
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      inventory: { select: { quantity: true } },
+    },
   });
   const foundIds = new Set(found.map((p) => p.id));
   const missing = unique.filter((id) => !foundIds.has(id));
   if (missing.length > 0) {
     throw badRequest(`منتجات غير موجودة في مؤسستك: ${missing.join(", ")}`);
   }
+  return found;
+}
+
+/** تجميع كميات البنود لكل منتج (بنود مكررة للمنتج الواحد) */
+function groupQty(items: Array<{ productId: string; quantity: number }>): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const it of items) {
+    map.set(it.productId, (map.get(it.productId) ?? 0) + it.quantity);
+  }
+  return map;
+}
+
+/**
+ * تغيير مخزون آمن داخل المعاملة:
+ * لا ينزل تحت الصفر إلا إذا سُمح صراحةً (allowNegative — بيع بتجاوز المخزون).
+ * الإزالة (stockDelta سالب) تُرفض بـ 400 برسالة واضحة تحتوي اسم المنتج والكمية.
+ */
+async function changeStock(
+  tx: Tx,
+  ctx: OrgContext,
+  productId: string,
+  stockDelta: number,
+  opts: { allowNegative: boolean; label: string },
+): Promise<void> {
+  if (stockDelta === 0) return;
+  const inv = await tx.inventory.findUnique({
+    where: { productId },
+    select: { quantity: true },
+  });
+  const current = inv?.quantity ?? 0;
+  const next = current + stockDelta;
+  if (stockDelta < 0 && next < 0 && !opts.allowNegative) {
+    throw badRequest(
+      `الكمية المتوفرة من «${opts.label}» (${current}) لا تكفي العملية (المطلوب ${-stockDelta})`,
+    );
+  }
+  if (inv) {
+    await tx.inventory.update({ where: { productId }, data: { quantity: next } });
+  } else {
+    await tx.inventory.create({
+      data: { organizationId: ctx.organizationId, productId, quantity: next },
+    });
+  }
+}
+
+/** تعيين كمية فعلية (جرد) — يقبل الصفر */
+async function setStock(
+  tx: Tx,
+  ctx: OrgContext,
+  productId: string,
+  target: number,
+): Promise<void> {
+  const inv = await tx.inventory.findUnique({ where: { productId }, select: { quantity: true } });
+  if (inv) {
+    await tx.inventory.update({ where: { productId }, data: { quantity: target } });
+  } else {
+    await tx.inventory.create({
+      data: { organizationId: ctx.organizationId, productId, quantity: target },
+    });
+  }
+}
+
+/** تسجيل حركة مخزون مرتبطة بمستند (saleId/purchaseId اختياريان — أعمدة تاريخية) */
+async function logMovement(
+  tx: Tx,
+  ctx: OrgContext,
+  data: {
+    productId: string;
+    type: "in" | "out" | "adjust";
+    quantity: number;
+    date: string;
+    note?: string | null;
+    saleId?: string | null;
+    purchaseId?: string | null;
+  },
+) {
+  return tx.inventoryMovement.create({
+    data: { ...data, organizationId: ctx.organizationId },
+  });
+}
+
+/** إعداد تجاوز المخزون لمؤسسة الجلسة */
+async function getAllowOversell(tx: Tx, ctx: OrgContext): Promise<boolean> {
+  const org = await tx.organization.findUnique({
+    where: { id: ctx.organizationId },
+    select: { allowOversell: true },
+  });
+  return org?.allowOversell ?? false;
 }
 
 async function assertNumberFree(
@@ -392,37 +527,118 @@ const sales = guarded("sales", {
   create: async (ctx, body) => {
     const data = v.saleSchema.parse(body);
     await assertCustomerInOrg(ctx, data.customerId);
-    await assertProductsInOrg(ctx, data.items.map((i) => i.productId));
     await assertNumberFree(ctx, "sale", data.number);
-    return prisma.sale.create({
-      data: {
-        organizationId: ctx.organizationId,
-        customerId: data.customerId,
-        number: data.number,
-        date: data.date,
-        discount: data.discount ?? 0,
-        paymentStatus: data.paymentStatus,
-        note: data.note ?? null,
-        items: {
-          create: data.items.map((i) => ({ ...i, organizationId: ctx.organizationId })),
+    const needQty = groupQty(data.items);
+
+    return prisma.$transaction(async (tx) => {
+      const allowOversell = await getAllowOversell(tx, ctx);
+      const products = await loadProductsInOrg(ctx, [...needQty.keys()], tx);
+      const byId = new Map(products.map((p) => [p.id, p]));
+
+      // التحقق: منتج موقوف يُمنع — مخزون غير كافٍ يُمنع إلا بإعداد «تجاوز المخزون»
+      for (const p of products) {
+        if (p.status === "inactive") {
+          throw badRequest(`المنتج «${p.name}» موقوف — لا يمكن بيعه`);
+        }
+        const needed = needQty.get(p.id) ?? 0;
+        const available = p.inventory?.quantity ?? 0;
+        if (!allowOversell && needed > available) {
+          throw badRequest(
+            `الكمية المتوفرة من «${p.name}» (${available}) لا تكفي العملية (المطلوب ${needed}) — يمكن تفعيل «السماح ببيع أكبر من المخزون» من الإعدادات`,
+          );
+        }
+      }
+
+      // البيع → ينقص المخزون ويُسجَّل كحركة «out» مرتبطة بالبيع
+      const sale = await tx.sale.create({
+        data: {
+          organizationId: ctx.organizationId,
+          customerId: data.customerId,
+          number: data.number,
+          date: data.date,
+          discount: data.discount ?? 0,
+          paymentStatus: data.paymentStatus,
+          note: data.note ?? null,
+          items: {
+            create: data.items.map((i) => ({ ...i, organizationId: ctx.organizationId })),
+          },
         },
-      },
-      include: itemInclude,
+        include: itemInclude,
+      });
+
+      for (const [productId, qty] of needQty) {
+        const p = byId.get(productId)!;
+        await changeStock(tx, ctx, productId, -qty, {
+          allowNegative: allowOversell,
+          label: p.name,
+        });
+        await logMovement(tx, ctx, {
+          productId,
+          type: "out",
+          quantity: qty,
+          date: data.date,
+          note: `بيع ${data.number}`,
+          saleId: sale.id,
+        });
+      }
+      return sale;
     });
   },
   update: async (ctx, id, body) => {
     const data = v.saleSchema.partial().parse(body);
     const existing = await findScopedOrThrow(
-      await prisma.sale.findFirst({ where: { id, organizationId: ctx.organizationId } }),
+      await prisma.sale.findFirst({
+        where: { id, organizationId: ctx.organizationId },
+        include: itemInclude,
+      }),
     );
     if (data.customerId) await assertCustomerInOrg(ctx, data.customerId);
     if (data.number && data.number !== existing.number) {
       await assertNumberFree(ctx, "sale", data.number, id);
     }
-    if (data.items) {
-      await assertProductsInOrg(ctx, data.items.map((i) => i.productId));
-    }
+
     return prisma.$transaction(async (tx) => {
+      // تغيّرت البنود → فروقات المخزون تُطبَّق كحركات مرتبطة بالبيع
+      if (data.items) {
+        const allowOversell = await getAllowOversell(tx, ctx);
+        const oldQty = groupQty(existing.items);
+        const newQty = groupQty(data.items);
+        const allIds = [...new Set([...oldQty.keys(), ...newQty.keys()])];
+        const products = await loadProductsInOrg(ctx, allIds, tx);
+        const byId = new Map(products.map((p) => [p.id, p]));
+        const docNumber = data.number ?? existing.number;
+        const docDate = data.date ?? existing.date;
+
+        for (const productId of allIds) {
+          const delta = (newQty.get(productId) ?? 0) - (oldQty.get(productId) ?? 0);
+          if (delta === 0) continue;
+          const p = byId.get(productId)!;
+          if (delta > 0) {
+            if (p.status === "inactive") {
+              throw badRequest(`المنتج «${p.name}» موقوف — لا يمكن بيعه`);
+            }
+            const available = p.inventory?.quantity ?? 0;
+            if (!allowOversell && delta > available) {
+              throw badRequest(
+                `الكمية المتوفرة من «${p.name}» (${available}) لا تكفي العملية (المطلوب ${delta})`,
+              );
+            }
+          }
+          await changeStock(tx, ctx, productId, -delta, {
+            allowNegative: delta > 0 && allowOversell,
+            label: p.name,
+          });
+          await logMovement(tx, ctx, {
+            productId,
+            type: delta > 0 ? "out" : "in",
+            quantity: Math.abs(delta),
+            date: docDate,
+            note: `تعديل بيع ${docNumber}`,
+            saleId: id,
+          });
+        }
+      }
+
       await tx.sale.update({
         where: { id },
         data: {
@@ -448,10 +664,47 @@ const sales = guarded("sales", {
     });
   },
   remove: async (ctx, id) => {
-    await findScopedOrThrow(
-      await prisma.sale.findFirst({ where: { id, organizationId: ctx.organizationId } }),
+    const existing = await findScopedOrThrow(
+      await prisma.sale.findFirst({
+        where: { id, organizationId: ctx.organizationId },
+        include: itemInclude,
+      }),
     );
-    await prisma.sale.delete({ where: { id } });
+
+    await prisma.$transaction(async (tx) => {
+      // حذف آمن: يُعكس فقط الأثر الفعلي لهذا البيع (من حركاته المرتبطة).
+      // بيع قديم بلا حركات مرتبطة (أُنشئ قبل نظام الربط) → لا يُعدَّل المخزون إطلاقًا.
+      const linked = await tx.inventoryMovement.findMany({
+        where: { saleId: id, organizationId: ctx.organizationId },
+      });
+      const net = new Map<string, number>();
+      for (const m of linked) {
+        const cur = net.get(m.productId) ?? 0;
+        const effect = m.type === "out" ? m.quantity : m.type === "in" ? -m.quantity : 0;
+        net.set(m.productId, cur + effect);
+      }
+      if (net.size > 0) {
+        const products = await loadProductsInOrg(ctx, [...net.keys()], tx);
+        const byId = new Map(products.map((p) => [p.id, p]));
+        for (const [productId, qty] of net) {
+          if (qty <= 0) continue;
+          const p = byId.get(productId)!;
+          await changeStock(tx, ctx, productId, qty, {
+            allowNegative: false,
+            label: p.name,
+          });
+          await logMovement(tx, ctx, {
+            productId,
+            type: "in",
+            quantity: qty,
+            date: existing.date,
+            note: `إلغاء بيع ${existing.number}`,
+            saleId: id,
+          });
+        }
+      }
+      await tx.sale.delete({ where: { id } });
+    });
   },
 });
 
@@ -474,35 +727,87 @@ const purchases = guarded("purchases", {
   create: async (ctx, body) => {
     const data = v.purchaseSchema.parse(body);
     await assertSupplierInOrg(ctx, data.supplierId);
-    await assertProductsInOrg(ctx, data.items.map((i) => i.productId));
     await assertNumberFree(ctx, "purchase", data.number);
-    return prisma.purchase.create({
-      data: {
-        organizationId: ctx.organizationId,
-        supplierId: data.supplierId,
-        number: data.number,
-        date: data.date,
-        discount: data.discount ?? 0,
-        paymentStatus: data.paymentStatus,
-        note: data.note ?? null,
-        items: {
-          create: data.items.map((i) => ({ ...i, organizationId: ctx.organizationId })),
+    const needQty = groupQty(data.items);
+
+    return prisma.$transaction(async (tx) => {
+      const products = await loadProductsInOrg(ctx, [...needQty.keys()], tx);
+      const byId = new Map(products.map((p) => [p.id, p]));
+
+      // الشراء → يزيد المخزون ويُسجَّل كحركة «in» مرتبطة بالشراء
+      const purchase = await tx.purchase.create({
+        data: {
+          organizationId: ctx.organizationId,
+          supplierId: data.supplierId,
+          number: data.number,
+          date: data.date,
+          discount: data.discount ?? 0,
+          paymentStatus: data.paymentStatus,
+          note: data.note ?? null,
+          items: {
+            create: data.items.map((i) => ({ ...i, organizationId: ctx.organizationId })),
+          },
         },
-      },
-      include: itemInclude,
+        include: itemInclude,
+      });
+
+      for (const [productId, qty] of needQty) {
+        const p = byId.get(productId)!;
+        await changeStock(tx, ctx, productId, qty, { allowNegative: false, label: p.name });
+        await logMovement(tx, ctx, {
+          productId,
+          type: "in",
+          quantity: qty,
+          date: data.date,
+          note: `شراء ${data.number}`,
+          purchaseId: purchase.id,
+        });
+      }
+      return purchase;
     });
   },
   update: async (ctx, id, body) => {
     const data = v.purchaseSchema.partial().parse(body);
     const existing = await findScopedOrThrow(
-      await prisma.purchase.findFirst({ where: { id, organizationId: ctx.organizationId } }),
+      await prisma.purchase.findFirst({
+        where: { id, organizationId: ctx.organizationId },
+        include: itemInclude,
+      }),
     );
     if (data.supplierId) await assertSupplierInOrg(ctx, data.supplierId);
     if (data.number && data.number !== existing.number) {
       await assertNumberFree(ctx, "purchase", data.number, id);
     }
-    if (data.items) await assertProductsInOrg(ctx, data.items.map((i) => i.productId));
+
     return prisma.$transaction(async (tx) => {
+      if (data.items) {
+        const oldQty = groupQty(existing.items);
+        const newQty = groupQty(data.items);
+        const allIds = [...new Set([...oldQty.keys(), ...newQty.keys()])];
+        const products = await loadProductsInOrg(ctx, allIds, tx);
+        const byId = new Map(products.map((p) => [p.id, p]));
+        const docNumber = data.number ?? existing.number;
+        const docDate = data.date ?? existing.date;
+
+        for (const productId of allIds) {
+          const delta = (newQty.get(productId) ?? 0) - (oldQty.get(productId) ?? 0);
+          if (delta === 0) continue;
+          const p = byId.get(productId)!;
+          await changeStock(tx, ctx, productId, delta, {
+            allowNegative: false,
+            label: p.name,
+          });
+          await logMovement(tx, ctx, {
+            productId,
+            type: delta > 0 ? "in" : "out",
+            quantity: Math.abs(delta),
+            date: docDate,
+            note: `تعديل شراء ${docNumber}`,
+            purchaseId: id,
+          });
+        }
+      }
+
       await tx.purchase.update({
         where: { id },
         data: {
@@ -528,10 +833,47 @@ const purchases = guarded("purchases", {
     });
   },
   remove: async (ctx, id) => {
-    await findScopedOrThrow(
-      await prisma.purchase.findFirst({ where: { id, organizationId: ctx.organizationId } }),
+    const existing = await findScopedOrThrow(
+      await prisma.purchase.findFirst({
+        where: { id, organizationId: ctx.organizationId },
+        include: itemInclude,
+      }),
     );
-    await prisma.purchase.delete({ where: { id } });
+
+    await prisma.$transaction(async (tx) => {
+      // حذف آمن: يُعكس فقط الأثر الفعلي لهذا الشراء (من حركاته المرتبطة).
+      // إن لم يكفِ المخزون لعكس الكمية (بِيعت بالفعل) → 400 بدل تعديل خاطئ.
+      const linked = await tx.inventoryMovement.findMany({
+        where: { purchaseId: id, organizationId: ctx.organizationId },
+      });
+      const net = new Map<string, number>();
+      for (const m of linked) {
+        const cur = net.get(m.productId) ?? 0;
+        const effect = m.type === "in" ? m.quantity : m.type === "out" ? -m.quantity : 0;
+        net.set(m.productId, cur + effect);
+      }
+      if (net.size > 0) {
+        const products = await loadProductsInOrg(ctx, [...net.keys()], tx);
+        const byId = new Map(products.map((p) => [p.id, p]));
+        for (const [productId, qty] of net) {
+          if (qty <= 0) continue;
+          const p = byId.get(productId)!;
+          await changeStock(tx, ctx, productId, -qty, {
+            allowNegative: false,
+            label: p.name,
+          });
+          await logMovement(tx, ctx, {
+            productId,
+            type: "out",
+            quantity: qty,
+            date: existing.date,
+            note: `إلغاء شراء ${existing.number}`,
+            purchaseId: id,
+          });
+        }
+      }
+      await tx.purchase.delete({ where: { id } });
+    });
   },
 });
 

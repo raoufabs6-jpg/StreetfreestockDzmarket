@@ -154,6 +154,7 @@ export function buildSeed(): SeedData {
     currency: "DZD",
     currentUserId: "usr-1",
     rolePermissions: DEFAULT_ROLE_PERMISSIONS,
+    allowOversell: false,
   };
 
   return {

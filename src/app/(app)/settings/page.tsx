@@ -174,6 +174,25 @@ export default function SettingsPage() {
               }))}
             />
 
+            {/* السماح ببيع أكبر من المخزون (طلب مسبق) — يُفحص على الخادم أيضًا */}
+            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <input
+                type="checkbox"
+                checked={settings.allowOversell}
+                disabled={!manage}
+                onChange={(e) => void save({ allowOversell: e.target.checked })}
+                className="mt-0.5 size-4 accent-primary-600"
+              />
+              <span>
+                <span className="block text-sm font-bold text-slate-700">
+                  {t("settings.allowOversell")}
+                </span>
+                <span className="mt-0.5 block text-xs text-slate-400">
+                  {t("settings.allowOversellHint")}
+                </span>
+              </span>
+            </label>
+
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-slate-700">{t("settings.language")}</label>
               <div className="flex gap-2">

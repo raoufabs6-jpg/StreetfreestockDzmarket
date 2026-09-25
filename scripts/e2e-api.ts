@@ -175,6 +175,13 @@ async function main() {
     note: "",
   });
   ok(sale.status === 201 && sale.json.data.items.length === 1, "بيع مع بنود → 201", sale.json);
+  // ERP: البيع يحدّث المخزون تلقائيًا عبر حركة مرتبطة
+  const stockAfterSaleCreate = await call("GET", `/api/v1/products/${prodA.id}`, A);
+  ok(
+    stockAfterSaleCreate.json?.data?.stock === 8,
+    "البيع يخصم المخزون تلقائيًا (10 ← 8)",
+    stockAfterSaleCreate.json?.data?.stock,
+  );
 
   const dupSale = await call("POST", "/api/v1/sales", A, {
     number: "SAL-0001",
@@ -197,7 +204,7 @@ async function main() {
   });
   ok(mov.status === 201, "سحب مخزون → 201", mov.status);
   const prodAfter = await call("GET", `/api/v1/products/${prodA.id}`, A);
-  ok(prodAfter.json?.data?.stock === 7, "المخزون نقص لـ 7", prodAfter.json?.data?.stock);
+  ok(prodAfter.json?.data?.stock === 5, "المخزون نقص لـ 5 (8 خصم البيع − 3 سحب)", prodAfter.json?.data?.stock);
 
   const movTooMuch = await call("POST", "/api/v1/movements", A, {
     productId: prodA.id,
@@ -520,6 +527,171 @@ async function main() {
 
   const deleteOwner = await call("DELETE", `/api/v1/users/${registerC.json.data.user.id}`, AC);
   ok(deleteOwner.status === 403, "مدير لا يحذف حساب المالك → 403", deleteOwner.status);
+
+  /* ---------- 10) عمليات ERP المترابطة ---------- */
+  console.log("\n[10] ERP: المنتجات والحالة والمخزون المرتبط بالبيع والشراء");
+  // جلسة A انتهت بعد تسجيل الخروج في [8] — نعيد الدخول
+  const loginERP = await call("POST", "/api/auth/login", null, {
+    email: "admin-a@test.dz",
+    password: "password123",
+  });
+  ok(loginERP.status === 200, "إعادة الدخول لقسم ERP → 200", loginERP.status);
+  const E = loginERP.cookie!;
+  const getStock = async () =>
+    (await call("GET", `/api/v1/products/${prodA.id}`, E)).json?.data?.stock;
+
+  const s0 = await getStock();
+  ok(s0 === 5, "نقطة انطلاق المخزون في قسم ERP = 5", s0);
+
+  // (1) حالة المنتج: إيقاف يمنع البيع دون لمس المخزون
+  const off = await call("PATCH", `/api/v1/products/${prodA.id}`, E, { status: "inactive" });
+  ok(off.status === 200 && off.json?.data?.status === "inactive", "إيقاف المنتج → status=inactive", off.json?.data);
+  const blocked = await call("POST", "/api/v1/sales", E, {
+    number: "SAL-ERP-1",
+    date: "2026-09-25",
+    customerId: custA.id,
+    items: [{ productId: prodA.id, quantity: 1, price: 100 }],
+    discount: 0,
+    paymentStatus: "paid",
+    note: "",
+  });
+  ok(blocked.status === 400, "بيع منتج موقوف → 400", blocked.status);
+  const s1 = await getStock();
+  ok(s1 === 5, "البيع المحجوب لا يمسّ المخزون", s1);
+  const on = await call("PATCH", `/api/v1/products/${prodA.id}`, E, { status: "active" });
+  ok(on.status === 200 && on.json?.data?.status === "active", "إعادة تفعيل المنتج → active", on.json?.data);
+
+  // (2) البائع الأكبر من المتوفر: ممنوع افتراضيًا، ومسموح مع allowOversell
+  const tooMuch = await call("POST", "/api/v1/sales", E, {
+    number: "SAL-ERP-2",
+    date: "2026-09-25",
+    customerId: custA.id,
+    items: [{ productId: prodA.id, quantity: 999, price: 100 }],
+    discount: 0,
+    paymentStatus: "paid",
+    note: "",
+  });
+  ok(tooMuch.status === 400, "بيع أكبر من المتوفر → 400 (الافتراضي)", tooMuch.status);
+  const oversellOn = await call("PUT", "/api/settings", E, { allowOversell: true });
+  ok(
+    oversellOn.status === 200 && oversellOn.json?.data?.allowOversell === true,
+    "تفعيل allowOversell → 200",
+    oversellOn.json?.data,
+  );
+  const oversellSale = await call("POST", "/api/v1/sales", E, {
+    number: "SAL-ERP-3",
+    date: "2026-09-25",
+    customerId: custA.id,
+    items: [{ productId: prodA.id, quantity: 7, price: 100 }],
+    discount: 0,
+    paymentStatus: "paid",
+    note: "بيع بتجاوز",
+  });
+  ok(oversellSale.status === 201, "مع allowOversell → بيع7 قطع مقبول", oversellSale.status);
+  const s2 = await getStock();
+  ok(s2 === -2, "المخزون تحت الصفر بعد البيع المسموح (5 − 7)", s2);
+  const oversellOff = await call("PUT", "/api/settings", E, { allowOversell: false });
+  ok(
+    oversellOff.status === 200 && oversellOff.json?.data?.allowOversell === false,
+    "إعادة allowOversell إلى false",
+    oversellOff.json?.data,
+  );
+
+  // (3) تعديل الكمية (adjust) = تعيين مطلق حتى يصلح المخزون السالب
+  const adjust = await call("POST", "/api/v1/movements", E, {
+    productId: prodA.id,
+    type: "adjust",
+    quantity: 10,
+    date: "2026-09-25",
+    note: "جرد",
+  });
+  ok(adjust.status === 201, "حركة adjust (تعيين كمية) → 201", adjust.status);
+  const s3 = await getStock();
+  ok(s3 === 10, "adjust يعيّن الكمية على 10 (مطلقًا)", s3);
+
+  // (4) المورد والشراء يزيدان المخزون بحركة مرتبطة
+  const supplier = await call("POST", "/api/v1/suppliers", E, {
+    name: "مورد ERP",
+    contactName: "سمير",
+    email: "s@sup.dz",
+    phone: "0550000000",
+    address: "",
+    note: "",
+  });
+  ok(supplier.status === 201, "إنشاء مورد → 201", supplier.status);
+  const supplierId = supplier.json?.data?.id;
+  const purchase = await call("POST", "/api/v1/purchases", E, {
+    number: "PUR-ERP-1",
+    date: "2026-09-25",
+    supplierId,
+    items: [{ productId: prodA.id, quantity: 5, price: 60 }],
+    discount: 0,
+    paymentStatus: "unpaid",
+    note: "",
+  });
+  ok(purchase.status === 201, "إنشاء شراء (مرتبط بالمورد) → 201", purchase.status);
+  const purchaseId = purchase.json?.data?.id;
+  const s4 = await getStock();
+  ok(s4 === 15, "الشراء يزيد المخزون (10 ← 15)", s4);
+  const movsAfterPurchase = await call("GET", "/api/v1/movements?perPage=500", E);
+  const linkedIn = ((movsAfterPurchase.json?.data ?? []) as any[]).find(
+    (m) => m.purchaseId === purchaseId && m.type === "in" && m.quantity === 5,
+  );
+  ok(!!linkedIn, "حركة in مرتبطة بالشراء موجودة", linkedIn);
+
+  // (5) حذف شراء معادله ممنوع إن لم يكفِ المخزون (تحتاج 5 والمتوفر 3)
+  const adjustLow = await call("POST", "/api/v1/movements", E, {
+    productId: prodA.id,
+    type: "adjust",
+    quantity: 3,
+    date: "2026-09-25",
+    note: "",
+  });
+  ok(adjustLow.status === 201, "إنزال الكمية إلى 3 (adjust)", adjustLow.status);
+  const deleteBlocked = await call("DELETE", `/api/v1/purchases/${purchaseId}`, E);
+  ok(deleteBlocked.status === 400, "حذف شراء يسبب سلبية → 400", deleteBlocked.status);
+  const s5 = await getStock();
+  ok(s5 === 3, "الحذف المحجوب لا يغيّر المخزون", s5);
+  const adjustUp = await call("POST", "/api/v1/movements", E, {
+    productId: prodA.id,
+    type: "adjust",
+    quantity: 10,
+    date: "2026-09-25",
+    note: "",
+  });
+  ok(adjustUp.status === 201, "رفع الكمية إلى 10", adjustUp.status);
+  const deleteOk = await call("DELETE", `/api/v1/purchases/${purchaseId}`, E);
+  ok(deleteOk.status === 200, "حذف شراء معادله → 200 (يُعكس المخزون)", deleteOk.status);
+  const s6 = await getStock();
+  ok(s6 === 5, "حذف الشراء يُرجع المخزون (10 ← 5)", s6);
+
+  // (6) حذف بيع قديم بلا حركات مرتبطة → بلا أي تعديل مخزون
+  const legacySale = await call("POST", "/api/v1/sales", E, {
+    number: "SAL-ERP-4",
+    date: "2026-09-25",
+    customerId: custA.id,
+    items: [{ productId: prodA.id, quantity: 1, price: 100 }],
+    discount: 0,
+    paymentStatus: "paid",
+    note: "",
+  });
+  ok(legacySale.status === 201, "بيع رابع → 201", legacySale.status);
+  const s7 = await getStock();
+  ok(s7 === 4, "البيع الرابع خصم قطعة (5 ← 4)", s7);
+  const unlink = await pg.query(`UPDATE "InventoryMovement" SET "saleId" = NULL WHERE "saleId" = $1`, [
+    legacySale.json?.data?.id,
+  ]);
+  ok(unlink.rowCount === 1, "فصل الحركة المرتبطة (يحاكي مستندًا قديمًا)", unlink.rowCount);
+  const deleteLegacy = await call("DELETE", `/api/v1/sales/${legacySale.json?.data?.id}`, E);
+  ok(deleteLegacy.status === 200, "حذف بيع قديم (بلا حركات) → 200", deleteLegacy.status);
+  const s8 = await getStock();
+  ok(s8 === 4, "مستند قديم بلا حركات = بلا تعديل مخزون إطلاقًا", s8);
+
+  // (7) حذف بيع حديث مرتبط يعكس صافي حركاته فقط
+  const deleteOriginal = await call("DELETE", `/api/v1/sales/${sale.json?.data?.id}`, E);
+  ok(deleteOriginal.status === 200, "حذف البيع الأصلي → 200", deleteOriginal.status);
+  const s9 = await getStock();
+  ok(s9 === 6, "حذف البيع يعكس الحركة المرتبطة فقط (4 ← 6 = +2)", s9);
 
   await pg.end();
 

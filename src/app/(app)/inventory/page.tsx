@@ -3,7 +3,7 @@
 // المخزون — مستويات المنتجات + تعديل الكميات + سجل الحركات
 
 import { useMemo, useState } from "react";
-import { ArrowDownToLine, ArrowUpFromLine, History } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, History, Scale } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { useCollection, useCurrentUser, useSettings } from "@/lib/hooks";
 import { cn, formatMoney, formatDate, todayISO, uid } from "@/lib/utils";
@@ -19,7 +19,7 @@ export default function InventoryPage() {
   const { settings } = useSettings();
   const { can } = useCurrentUser();
 
-  const { rows: products, loading, update } = useCollection<Product>("products");
+  const { rows: products, loading } = useCollection<Product>("products");
   const { rows: movements, create: createMovement } = useCollection<StockMovement>("movements");
 
   const [search, setSearch] = useState("");
@@ -62,19 +62,21 @@ export default function InventoryPage() {
   };
 
   const applyAdjust = async () => {
-    if (!adjustTarget || !(qty > 0)) {
+    if (!adjustTarget) return;
+    const isSet = adjustType === "adjust"; // تعيين كمية فعلية (جرد) — يقبل الصفر
+    if (isSet ? qty < 0 || !Number.isInteger(qty) : !(qty > 0)) {
       toast.error(t("toast.fillRequired"));
       return;
     }
-    const delta = adjustType === "in" ? qty : -qty;
-    const nextStock = adjustTarget.stock + delta;
+    const nextStock = isSet ? qty : adjustTarget.stock + (adjustType === "in" ? qty : -qty);
     if (nextStock < 0) {
       toast.error(t("toast.fillRequired"));
       return;
     }
     setSaving(true);
     try {
-      await update(adjustTarget.id, { stock: nextStock });
+      // الحركة هي مصدر تحديث المخزون وحده (الخادم والوضع المحلي يطبّقانها)
+      // — لا تعديل مباشر للكمية حتى لا تُعدَّل مرتين
       await createMovement({
         id: uid("mov-"),
         createdAt: new Date().toISOString(),
@@ -153,8 +155,13 @@ export default function InventoryPage() {
       key: "qty",
       header: t("common.quantity"),
       render: (m) => (
-        <span className={cn("font-bold", m.type === "in" ? "text-emerald-600" : "text-rose-600")}>
-          {m.type === "in" ? "+" : "−"}
+        <span
+          className={cn(
+            "font-bold",
+            m.type === "in" ? "text-emerald-600" : m.type === "out" ? "text-rose-600" : "text-sky-600",
+          )}
+        >
+          {m.type === "in" ? "+" : m.type === "out" ? "−" : "="}
           {m.quantity}
         </span>
       ),
@@ -164,7 +171,9 @@ export default function InventoryPage() {
   ];
 
   const remaining = adjustTarget
-    ? adjustTarget.stock + (adjustType === "in" ? qty : -qty)
+    ? adjustType === "adjust"
+      ? qty
+      : adjustTarget.stock + (adjustType === "in" ? qty : -qty)
     : 0;
 
   return (
@@ -252,6 +261,15 @@ export default function InventoryPage() {
                   >
                     <ArrowUpFromLine className="size-4" />
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => openAdjust(p, "adjust")}
+                    className="rounded-lg p-2 text-sky-500 transition hover:bg-sky-50"
+                    title={t("inventory.adjustSet")}
+                    aria-label={t("inventory.adjustSet")}
+                  >
+                    <Scale className="size-4" />
+                  </button>
                 </>
               )
             : undefined
@@ -301,7 +319,7 @@ export default function InventoryPage() {
               </Badge>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
                 onClick={() => setAdjustType("in")}
@@ -328,12 +346,25 @@ export default function InventoryPage() {
                 <ArrowUpFromLine className="size-4" />
                 {t("inventory.adjustOut")}
               </button>
+              <button
+                type="button"
+                onClick={() => setAdjustType("adjust")}
+                className={cn(
+                  "flex items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-bold transition",
+                  adjustType === "adjust"
+                    ? "border-sky-400 bg-sky-50 text-sky-700"
+                    : "border-slate-200 text-slate-500 hover:bg-slate-50",
+                )}
+              >
+                <Scale className="size-4" />
+                {t("inventory.adjustSet")}
+              </button>
             </div>
 
             <Input
               type="number"
-              min={1}
-              label={t("inventory.adjustLabel")}
+              min={adjustType === "adjust" ? 0 : 1}
+              label={adjustType === "adjust" ? t("inventory.adjustSet") : t("inventory.adjustLabel")}
               value={qty}
               onChange={(e) => setQty(Number(e.target.value))}
               dir="ltr"

@@ -22,6 +22,7 @@ export interface Customer extends BaseRecord {
 
 /** منتج */
 export type Unit = "piece" | "kg" | "g" | "l" | "m" | "box";
+export type ProductStatus = "active" | "inactive";
 
 export interface Product extends BaseRecord {
   name: string;
@@ -33,6 +34,8 @@ export interface Product extends BaseRecord {
   stock: number;
   minStock: number;
   description: string;
+  /** نشط/موقوف — الموقوف لا يظهر في نماذج البيع ولا يمكن بيعه */
+  status?: ProductStatus;
 }
 
 /** مورد */
@@ -143,6 +146,8 @@ export interface BusinessSettings {
   currentUserId: ID | null;
   /** صلاحيات كل دور: مصفوفة من "الوحدة.إجراء" مثل "customers.view" */
   rolePermissions: Record<Role, string[]>;
+  /** السماح ببيع أكبر من المخزون المتوفر (طلب مسبق) — يُفحص على الخادم أيضًا */
+  allowOversell: boolean;
 }
 
 export type CurrencyCode = "DZD" | "EUR" | "USD" | "MAD" | "TND";
