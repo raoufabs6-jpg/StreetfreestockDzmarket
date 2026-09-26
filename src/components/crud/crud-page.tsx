@@ -114,8 +114,18 @@ export function CrudPage<K extends EntityKey>({ entityKey, extra }: CrudPageProp
         toast.success(t("toast.created"));
       }
       setFormOpen(false);
-    } catch {
-      toast.error(t("toast.error"));
+    } catch (err) {
+      const code = (err as { code?: string })?.code;
+      const msg = err instanceof Error ? err.message : "";
+      if (code === "SUBSCRIPTION_LIMIT_REACHED" || msg.includes("بلغت حد")) {
+        // حد الخطة — رسالة واضحة + زر ترقية يقود لصفحة الأسعار
+        toast.error(msg || t("subscription.limitReached"), {
+          label: t("subscription.upgrade"),
+          href: "/pricing",
+        });
+      } else {
+        toast.error(t("toast.error"));
+      }
     } finally {
       setSaving(false);
     }

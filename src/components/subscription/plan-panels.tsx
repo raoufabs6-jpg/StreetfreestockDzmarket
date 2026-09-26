@@ -216,6 +216,15 @@ export function CurrentPlanCard({ info }: { info: SubscriptionInfo }) {
           </div>
         )}
 
+        <div className="flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 text-xs ring-1 ring-slate-100">
+          <span className="font-semibold text-slate-600">{t("subscription.billingPeriod")}</span>
+          <span className="text-slate-500" dir="ltr">
+            {info.currentPeriodEnd
+              ? `${info.currentPeriodStart ? formatDate(info.currentPeriodStart, lang) : "—"} → ${formatDate(info.currentPeriodEnd, lang)}`
+              : t("subscription.noBilling")}
+          </span>
+        </div>
+
         <p className="text-xs leading-relaxed text-slate-500">
           {info.status === "trial"
             ? t("subscription.effectiveNote")

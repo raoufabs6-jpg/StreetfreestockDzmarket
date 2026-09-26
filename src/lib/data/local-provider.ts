@@ -275,6 +275,7 @@ class LocalStorageProvider implements DataProvider {
       trialUsedAt: rec.trialUsedAt ? new Date(rec.trialUsedAt).toISOString() : null,
       trialEndsAt: rec.trialEndsAt ? new Date(rec.trialEndsAt).toISOString() : null,
       daysLeft,
+      currentPeriodStart: null,
       currentPeriodEnd: null,
       limits,
       usage,

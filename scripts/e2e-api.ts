@@ -800,7 +800,7 @@ async function main() {
   ok(dashPage.status === 200, "صفحة لوحة التحكم → 200", dashPage.status);
 
   /* ---------- 12) الاشتراك SaaS: تجربة · حدود · صفحات عامة ---------- */
-  console.log("\n[12] الاشتراك SaaS: تجربة14 يومًا · حدود الخطة · صفحة الأسعار");
+  console.log("\n[12] الاشتراك SaaS: تجربة · حدود FREE/BASIC/BUSINESS · عدمحدود PRO · صفحة الأسعار");
 
   // صورة الاشتراك بعد التهيئة: تجربة على BUSINESS
   const sub0 = await call("GET", "/api/subscription", E);
@@ -810,6 +810,7 @@ async function main() {
   ok(sub?.trialEndsAt != null && new Date(sub.trialEndsAt).getTime() > Date.now(), "trialEndsAt في المستقبل", sub?.trialEndsAt);
   ok(sub?.daysLeft >= 1 && sub?.daysLeft <= 14, "أيام التجربة المتبقية بين 1 و14", sub?.daysLeft);
   ok(sub?.limits?.users === 15 && sub?.limits?.storageMB === 500, "حدود BUSINESS: 15 مستخدمًا · 500 م.ب", sub?.limits);
+  ok(sub?.currentPeriodStart === null && sub?.currentPeriodEnd === null, "currentPeriodStart/End = null (جاهزية دفع بلا مزوّد)", sub);
 
   // الاستخدام حقيقي من قاعدة البيانات (أطوال القوائم + بايتات التخزين)
   const customersNow = await call("GET", "/api/v1/customers", E);
@@ -841,6 +842,42 @@ async function main() {
     toBasic.status === 200 && toBasic.json?.data?.plan === "basic" && toBasic.json?.data?.status === "trial",
     "تبديل إلى BASIC أثناء التجربة → 200 (نفس التجربة)",
     toBasic.json?.data,
+  );
+
+  // PRO: موارد غير محدودة أثناء التجربة (تتجاوز حدود FREE بوضوح)
+  const toPro = await call("PUT", "/api/subscription", E, { plan: "pro" });
+  ok(
+    toPro.status === 200 && toPro.json?.data?.plan === "pro" && toPro.json?.data?.status === "trial",
+    "تبديل إلى PRO أثناء التجربة → 200",
+    toPro.json?.data?.plan,
+  );
+  ok(toPro.json?.data?.limits?.users === null && toPro.json?.data?.limits?.storageMB === 2048, "PRO: حدود غير محدودة (users=null · 2048MB)", toPro.json?.data?.limits);
+  const proUserA = await call("POST", "/api/v1/users", E, {
+    name: "مستخدم PRO أ", email: "pro-unlimited-a@test.dz", phone: "", role: "employee", status: "active",
+  });
+  const proUserB = await call("POST", "/api/v1/users", E, {
+    name: "مستخدم PRO ب", email: "pro-unlimited-b@test.dz", phone: "", role: "employee", status: "active",
+  });
+  ok(
+    proUserA.status === 201 && proUserB.status === 201,
+    "PRO: إنشاء مستخدمين تجاوزا حد FREE (4 مستخدمين) → 201 + 201",
+    [proUserA.status, proUserB.status],
+  );
+
+  // BASIC: حد5 مستخدمين مفروض فعليًا
+  const backBasic = await call("PUT", "/api/subscription", E, { plan: "basic" });
+  ok(backBasic.status === 200 && backBasic.json?.data?.plan === "basic", "العودة إلى BASIC → 200 (حدود=5)", backBasic.json?.data?.plan);
+  const basicFill = await call("POST", "/api/v1/users", E, {
+    name: "مستخدم BASIC", email: "basic-limit-fill@test.dz", phone: "", role: "employee", status: "active",
+  });
+  ok(basicFill.status === 201, "BASIC: ملء الحد الخامس → 201", basicFill.status);
+  const basicOver = await call("POST", "/api/v1/users", E, {
+    name: "زائد BASIC", email: "basic-limit-over@test.dz", phone: "", role: "employee", status: "active",
+  });
+  ok(
+    basicOver.status === 403 && basicOver.json?.error?.code === "SUBSCRIPTION_LIMIT_REACHED",
+    "BASIC: تجاوز الحد → 403 + SUBSCRIPTION_LIMIT_REACHED",
+    basicOver.json?.error,
   );
 
   // انتهاء التجربة: ترقية كسولة إلى expired + رفض الخطة المدفوعة (جاهزية Stripe)
@@ -888,6 +925,11 @@ async function main() {
     status: "active",
   });
   ok(over.status === 403, "تجاوز حد مستخدمي FREE → 403 (خطة أعلى)", over.status);
+  ok(
+    over.json?.error?.code === "SUBSCRIPTION_LIMIT_REACHED",
+    "كود الخطأ المعياري SUBSCRIPTION_LIMIT_REACHED",
+    over.json?.error?.code,
+  );
 
   // الصفحات: الأسعار عامة، الاشتراك محمي بالجلسة
   const pricingPage = await fetch(`${BASE}/pricing`, { redirect: "manual" });
@@ -903,6 +945,31 @@ async function main() {
     "صفحة الاشتراك بدون جلسة → تحويل",
     subPageNo.status,
   );
+
+  // BUSINESS: مؤسسة جديدة (15 مستخدمًا) — الحد مفروض فعليًا
+  const registerD = await call("POST", "/api/auth/register", null, {
+    organizationName: "مؤسسة حد الأعمال",
+    name: "مالك الأعمال",
+    email: "biz-limit-owner@test.dz",
+    password: "password123",
+  });
+  ok(registerD.status === 201, "تسجيل مؤسسة اختبار BUSINESS → 201", registerD.status);
+  const D = registerD.cookie!;
+  for (let i = 1; i <= 14; i++) {
+    await call("POST", "/api/v1/users", D, {
+      name: `موظف أعمال ${i}`, email: `biz-limit-${i}@test.dz`, phone: "", role: "employee", status: "active",
+    });
+  }
+  const bizOver = await call("POST", "/api/v1/users", D, {
+    name: "زائد الأعمال", email: "biz-limit-over@test.dz", phone: "", role: "employee", status: "active",
+  });
+  ok(
+    bizOver.status === 403 && bizOver.json?.error?.code === "SUBSCRIPTION_LIMIT_REACHED",
+    "BUSINESS: تجاوز الحد15 → 403 + SUBSCRIPTION_LIMIT_REACHED",
+    bizOver.json?.error,
+  );
+  const bizSub = await call("GET", "/api/subscription", D);
+  ok(bizSub.json?.data?.usage?.users === 15 && bizSub.json?.data?.remaining?.users === 0, "BUSINESS: usage=15 · remaining=0 (حساب الاستخدام)", bizSub.json?.data?.usage);
 
   await pg.end();
 

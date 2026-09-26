@@ -10,7 +10,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { CheckCircle2, XCircle, Info, X } from "lucide-react";
+import Link from "next/link";
+import { CheckCircle2, XCircle, Info, X, ArrowUpCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type ToastTone = "success" | "error" | "info";
@@ -19,12 +20,19 @@ interface ToastItem {
   id: number;
   message: string;
   tone: ToastTone;
+  /** زر إجراء اختياري (مثل «ترقية الخطة» → /pricing) */
+  action?: { label: string; href: string };
+}
+
+interface ToastAction {
+  label: string;
+  href: string;
 }
 
 interface ToastValue {
-  toast: (message: string, tone?: ToastTone) => void;
+  toast: (message: string, tone?: ToastTone, action?: ToastAction) => void;
   success: (message: string) => void;
-  error: (message: string) => void;
+  error: (message: string, action?: ToastAction) => void;
   info: (message: string) => void;
 }
 
@@ -45,9 +53,9 @@ const toneIcons: Record<ToastTone, ReactNode> = {
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<ToastItem[]>([]);
 
-  const toast = useCallback((message: string, tone: ToastTone = "success") => {
+  const toast = useCallback((message: string, tone: ToastTone = "success", action?: ToastAction) => {
     const id = Date.now() + Math.random();
-    setItems((prev) => [...prev, { id, message, tone }]);
+    setItems((prev) => [...prev, { id, message, tone, action }]);
     window.setTimeout(() => {
       setItems((prev) => prev.filter((t) => t.id !== id));
     }, 3500);
@@ -57,7 +65,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     () => ({
       toast,
       success: (m: string) => toast(m, "success"),
-      error: (m: string) => toast(m, "error"),
+      error: (m: string, action?: ToastAction) => toast(m, "error", action),
       info: (m: string) => toast(m, "info"),
     }),
     [toast],
@@ -80,7 +88,18 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             )}
           >
             {toneIcons[item.tone]}
-            <span className="flex-1 leading-6">{item.message}</span>
+            <span className="flex-1 leading-6">
+              {item.message}
+              {item.action && (
+                <Link
+                  href={item.action.href}
+                  className="mt-1.5 inline-flex items-center gap-1 rounded-lg bg-rose-600 px-2.5 py-1 text-xs font-bold text-white transition hover:bg-rose-700"
+                >
+                  <ArrowUpCircle className="size-3.5" />
+                  {item.action.label}
+                </Link>
+              )}
+            </span>
             <button
               type="button"
               onClick={() => setItems((prev) => prev.filter((t) => t.id !== item.id))}

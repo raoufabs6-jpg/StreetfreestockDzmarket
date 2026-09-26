@@ -89,7 +89,7 @@ npm run build         # بناء الإنتاج
 npm run db:validate   # التحقق من مخطط Prisma
 npm run db:studio     # متصفح قاعدة البيانات
 npm run db:smoke      # فحص صحة العلاقات/القيود/العزل (يُنشئ مؤسسة اختبار ويحذفها)
-npm run test:api      # اختبار تكامل API الشامل — 145 فحوصات (يتطلب خادمًا يعملًا + DATABASE_URL يحتوي "test")
+npm run test:api      # اختبار تكامل API الشامل — 155 فحوصات (يتطلب خادمًا يعملًا + DATABASE_URL يحتوي "test")
 ```
 
 ---
@@ -120,7 +120,7 @@ npm run test:api      # اختبار تكامل API الشامل — 145 فحو�
 
 نظام اشتراكات متعدد المؤسسات بخط **FREE · BASIC · BUSINESS · PRO** — **بدون بوابة دفع في هذه المرحلة** (البنية جاهزة لربط Stripe أو غيره لاحقًا):
 
-- **جدول `Subscription`** — سجل فريد لكل مؤسسة: `plan` + `status` (`trial | active | expired | cancelled`) + `trialUsedAt` / `trialEndsAt` + `currentPeriodEnd` (**محجوزة** لدورة الدفع المدفوعة المستقبلية) — هجرة `20260927000100_subscriptions`.
+- **جدول `Subscription`** — سجل فريد لكل مؤسسة: `plan` + `status` (`trial | active | expired | cancelled`) + `trialUsedAt` / `trialEndsAt` + `currentPeriodStart` / `currentPeriodEnd` (**محجوزان** لدورة الدفع المدفوعة المستقبلية) — هجرتان تأليفيتان غير تدميريتان: `20260927000100_subscriptions` ثم `20260927000200_subscription_billing_period`.
 - **تجربة مجانية14 يومًا** تبدأ تلقائيًا مع كل مؤسسة جديدة (setup وregister) على خطة BUSINESS؛ عند انتهائها تُرقّى الحالة تلقائيًا إلى `expired` وتصبح الخطة الفعلية `free` (تطبيق كسول عند القراءة).
 - **حدود لكل خطة** (جدول `PLAN_LIMITS` في `src/lib/plans.ts` — `null` = غير محدود):
 
@@ -131,11 +131,11 @@ npm run test:api      # اختبار تكامل API الشامل — 145 فحو�
   | BUSINESS | 15 | 5000 | 5000 | 5000 | 500 MB |
   | PRO | ∞ | ∞ | ∞ | ∞ | 2048 MB |
 
-  الحدود **مفروضة على الخادم** عند الإنشاء (مستخدمين/منتجات/عملاء/فواتير → `403` عند البلوغ) في `src/lib/server/resources.ts`، وبنفس القواعد في الوضع المحلي.
+  الحدود **مفروضة على الخادم** عند الإنشاء (مستخدمين/منتجات/عملاء/فواتير → `403` بكود معياري **`SUBSCRIPTION_LIMIT_REACHED`**) في `src/lib/server/resources.ts` — والواجهة تعرض رسالة عربية واضحة مع زر **«ترقية الخطة»** يقود إلى `/pricing`. نفس القواعد في الوضع المحلي.
 - **الاستخدام حقيقي دائمًا**: `COUNT` لكل مورد داخل المؤسسة + مساحة تخزين فعلية بـ `SUM(pg_column_size(*))` فوق كل جداول المؤسسة (لا أرقام ثابتة).
 - **`/pricing` صفحة عامة** خارج المصادقة: بطاقات الأربع الخطط، مبدّل شهري/سنوي بأسعار DZD، شارة «الأكثر شيوعًا» على BUSINESS، وزر تبديل خطة فوري عند تسجيل الدخول.
 - **`/subscription` + لوحة التحكم**: الخطة الحالية، حالة الاشتراك، عدّاد فترة التجربة، أشرطة الاستخدام والمتبقي لكل حد.
-- **جاهزية الدفع**: تبديل خطة مدفوعة بعد انتهاء التجربة يُرفض `403` — نقطة ربط Stripe المستقبلية موسومة `[نقطة Stripe]` في `src/lib/server/subscription.ts` (تُستبدل بـ Checkout Session ثم Webhook يملأ `currentPeriodEnd`)، وأسعار `PLAN_PRICES` تجريبية للعرض فقط.
+- **جاهزية الدفع (`BillingProvider`)**: تجريد كامل في `src/lib/server/billing.ts` — واجهة `createCustomer / createCheckoutSession / createSubscription / cancelSubscription / changeSubscription` + تنفيذ افتراضي `NoopBillingProvider` **يرفض بلطف بلا مفاتيح ولا شبكة** (التطبيق يعمل بدون أي مزوّد). نقطة الربط الوحيدة: `switchPlan` في `src/lib/server/subscription.ts` — تبديل خطة مدفوعة بعد التجربة يحاول جلسة Checkout ثم يُرد `403` بكود `PAYMENT_REQUIRED`. لاحقًا: `setBillingProvider(new StripeBillingProvider(...))` + Webhook يملأ `currentPeriodStart/End`. أسعار `PLAN_PRICES` تجريبية للعرض فقط.
 - قواعد التبديل **نقية ومشتركة** في `planSwitch()` بـ `src/lib/plans.ts` — مصدر واحد للحقيقة بين الخادم والموزع المحلي.
 
 ## 🗄 قاعدة البيانات (Multi-tenant)

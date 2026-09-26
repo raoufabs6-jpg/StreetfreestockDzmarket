@@ -57,6 +57,8 @@ export interface SubscriptionInfo {
   trialEndsAt: string | null;
   /** أيام متبقية من التجربة (null إن لم تكن في تجربة) */
   daysLeft: number | null;
+  /** بداية الدورة المدفوعة — تُملأ عند تفعيل الدفع لاحقًا */
+  currentPeriodStart: string | null;
   /** نهاية الدورة المدفوعة — تُملأ عند تفعيل الدفع لاحقًا */
   currentPeriodEnd: string | null;
   limits: PlanLimits;

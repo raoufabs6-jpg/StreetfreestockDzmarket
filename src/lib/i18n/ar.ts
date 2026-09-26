@@ -470,6 +470,10 @@ export const ar = {
   "status.expired": "منتهية",
   "status.cancelled": "ملغاة",
   "dashboard.currentPlan": "خطتك الحالية",
+  "subscription.limitReached": "لقد وصلت إلى الحد الأقصى في خطتك الحالية.",
+  "subscription.billingPeriod": "فترة الفوترة الحالية",
+  "subscription.noBilling": "لم تبدأ — لا توجد مدفوعات بعد (جاهزية الدفع)",
+  "subscription.changePlan": "تغيير الخطة",
 } as const;
 
 export type MessageKey = keyof typeof ar;

@@ -9,7 +9,8 @@
 // ============================================================
 
 import { prisma } from "@/lib/server/db";
-import { forbidden } from "@/lib/server/errors";
+import { ApiError } from "@/lib/server/errors";
+import { BillingNotConfiguredError, getBillingProvider } from "@/lib/server/billing";
 import {
   PLAN_LIMITS,
   TRIAL_DAYS,
@@ -115,6 +116,7 @@ export async function getSubscriptionInfo(orgId: string): Promise<SubscriptionIn
     trialUsedAt: row.trialUsedAt?.toISOString() ?? null,
     trialEndsAt: row.trialEndsAt?.toISOString() ?? null,
     daysLeft,
+    currentPeriodStart: row.currentPeriodStart?.toISOString() ?? null,
     currentPeriodEnd: row.currentPeriodEnd?.toISOString() ?? null,
     limits,
     usage,
@@ -136,16 +138,58 @@ const RESOURCE_AR: Record<LimitedResource, string> = {
   invoices: "الفواتير",
 };
 
-/** رفض الإنشاء عند بلوغ حد الخطة الحالية (403) */
+/** رفض الإنشاء عند بلوغ حد الخطة الحالية — 403 + SUBSCRIPTION_LIMIT_REACHED */
 export async function assertPlanLimit(orgId: string, resource: LimitedResource): Promise<void> {
-  const info = await getSubscriptionInfo(orgId);
-  const limit = info.limits[resource];
-  if (limit === null) return;
-  if (info.usage[resource] >= limit) {
-    throw forbidden(
-      `بلغت حد خطة ${info.effectivePlan.toUpperCase()}: ${RESOURCE_AR[resource]} (${limit}) — وسّع خطتك من صفحة الأسعار`,
+  const result = await checkSubscriptionLimit(orgId, resource);
+  if (!result.allowed) {
+    throw new ApiError(
+      403,
+      "SUBSCRIPTION_LIMIT_REACHED",
+      `لقد وصلت إلى الحد الأقصى في خطتك الحالية: ${RESOURCE_AR[resource]} (${result.limit}) — ترقية الخطة من صفحة الأسعار`,
     );
   }
+}
+
+/* ==== أدوات الاشتراك القابلة لإعادة الاستخدام (§6) ==== */
+
+/** سجل اشتراك المؤسسة (يُنشئه مبدئيًا إن لم يوجد) */
+export async function getOrganizationSubscription(orgId: string) {
+  return loadRow(orgId);
+}
+
+/** الخطة الفعلية المطبَّقة */
+export function getEffectivePlan(sub: { plan: PlanId; status: SubscriptionStatus; trialEndsAt: Date | null }): PlanId {
+  return effectivePlan(sub.plan, sub.status, sub.trialEndsAt);
+}
+
+/** حدود خطة معيّنة */
+export function getPlanLimits(plan: PlanId) {
+  return PLAN_LIMITS[plan];
+}
+
+/** استهلاك المؤسسة الفعلي (عدادات + بايتات تخزين) */
+export async function getOrganizationUsage(orgId: string) {
+  return usageOf(orgId);
+}
+
+/** فحص غير رافض: هل يمكن إنشاء مورد جديد؟ */
+export async function checkSubscriptionLimit(orgId: string, resource: LimitedResource): Promise<{
+  allowed: boolean;
+  limit: number | null;
+  used: number;
+  remaining: number | null;
+  effectivePlan: PlanId;
+}> {
+  const info = await getSubscriptionInfo(orgId);
+  const limit = info.limits[resource];
+  const used = info.usage[resource];
+  return {
+    allowed: limit === null || used < limit,
+    limit,
+    used,
+    remaining: limit === null ? null : limit - used,
+    effectivePlan: info.effectivePlan,
+  };
 }
 
 /**
@@ -160,9 +204,27 @@ export async function switchPlan(orgId: string, plan: PlanId): Promise<Subscript
   // قواعد التبديل نقية في planSwitch (مصدر واحد للحقيقة مع الوضع المحلي)
   const result = planSwitch(row, plan);
   if (!result.ok) {
-    // [نقطة Stripe] → لاحقًا: create Checkout Session ثم redirect بدل الرفض
-    throw forbidden(
-      "الخطط المدفوعة تحتاج تفعيل الدفع — بوابة الدفع (Stripe) ستُربط في تحديث قادم. يمكنك الاستمرار بخطة FREE",
+    // [نقطة Stripe] — البنية جاهزة: BillingProvider هو نقطة الربط الوحيدة.
+    // NoopBillingProvider حاليًا (بلا مفاتيح وبلا شبكة) → نرفض بـ403 PAYMENT_REQUIRED.
+    // لاحقًا مع مزوّد حقيقي: createCheckoutSession → redirect(session.url)
+    // → Webhook يفعّل الاشتراك ويملأ currentPeriodStart/currentPeriodEnd.
+    try {
+      await getBillingProvider().createCheckoutSession({ organizationId: orgId, plan });
+    } catch (err) {
+      if (err instanceof BillingNotConfiguredError) {
+        throw new ApiError(
+          403,
+          "PAYMENT_REQUIRED",
+          "الخطط المدفوعة تحتاج تفعيل الدفع — بوابة الدفع (Stripe/PayPal) ستُربط في تحديث قادم. يمكنك الاستمرار بخطة FREE",
+        );
+      }
+      throw err;
+    }
+    // مزوّد متصل لكن لم يصل Webhook بعد → لا نفعّل الاشتراك بدونه
+    throw new ApiError(
+      403,
+      "PAYMENT_REQUIRED",
+      "الخطط المدفوعة تحتاج تفعيل الدفع — بوابة الدفع ستُربط في تحديث قادم. يمكنك الاستمرار بخطة FREE",
     );
   }
   await prisma.subscription.update({

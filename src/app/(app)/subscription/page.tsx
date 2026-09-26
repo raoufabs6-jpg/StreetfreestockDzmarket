@@ -48,12 +48,17 @@ export default function SubscriptionPage() {
         subtitle={t("pricing.subtitle")}
         actions={
           can("settings.manage") ? (
-            <Link href="/pricing">
-              <Button>
-                <ArrowUpCircle className="size-4" />
-                {t("subscription.upgrade")}
-              </Button>
-            </Link>
+            <div className="flex flex-wrap gap-2">
+              <Link href="/pricing">
+                <Button variant="secondary">{t("subscription.changePlan")}</Button>
+              </Link>
+              <Link href="/pricing">
+                <Button>
+                  <ArrowUpCircle className="size-4" />
+                  {t("subscription.upgrade")}
+                </Button>
+              </Link>
+            </div>
           ) : undefined
         }
       />

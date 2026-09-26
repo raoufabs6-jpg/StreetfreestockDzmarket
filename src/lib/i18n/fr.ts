@@ -452,4 +452,8 @@ export const fr: Record<MessageKey, string> = {
   "status.expired": "Expiré",
   "status.cancelled": "Annulé",
   "dashboard.currentPlan": "Votre plan actuel",
+  "subscription.limitReached": "Vous avez atteint la limite maximale de votre plan actuel.",
+  "subscription.billingPeriod": "Période de facturation actuelle",
+  "subscription.noBilling": "Non démarrée — aucun paiement (facturation prête)",
+  "subscription.changePlan": "Changer de plan",
 };

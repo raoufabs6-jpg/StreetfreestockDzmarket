@@ -560,6 +560,8 @@ model Subscription {
   trialUsedAt DateTime?
   /// نهاية فترة التجربة
   trialEndsAt  DateTime?
+  /// بداية الدورة المدفوعة — تُملأ عند تفعيل بوابة دفع لاحقًا (Stripe)
+  currentPeriodStart DateTime?
   /// نهاية الدورة المدفوعة — تُملأ عند تفعيل بوابة دفع لاحقًا (Stripe)
   currentPeriodEnd DateTime?
 
